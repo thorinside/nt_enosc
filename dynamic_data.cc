@@ -81,3 +81,8 @@ DynamicData::DynamicData() {
 }
 
 #pragma GCC pop_options
+
+// Define the pointer to the DTC-held DynamicData instance
+namespace Data {
+  DynamicData* data = nullptr;
+}

@@ -30,38 +30,38 @@ namespace Distortion {
     return u0_32::of_repr(x.repr());
   }
 
-  template<>
-  inline f warp<FOLD>(s1_15 x, f amount) {
-    if (amount <= 0.005_f)
-      return(f::inclusive(x));
-    s1_31 sample = x * s1_15(amount);
-    u0_32 phase = sample.to_unsigned_scale();
-    f res = DynamicData::fold.interpolateDiff<f>(phase);
-    res *= DynamicData::fold_max.interpolate(amount);
-    return res;
-  }
+template<>
+inline f warp<FOLD>(s1_15 x, f amount) {
+  if (amount <= 0.005_f)
+    return(f::inclusive(x));
+  s1_31 sample = x * s1_15(amount);
+  u0_32 phase = sample.to_unsigned_scale();
+  f res = Data::data->fold.interpolateDiff<f>(phase);
+  res *= Data::data->fold_max.interpolate(amount);
+  return res;
+}
 
-  template<>
-  inline f warp<CHEBY>(s1_15 x, f amount) {
-    constexpr f const fact = f(DynamicData::cheby.size() - 2);
-    amount *= fact;
-    auto [idx, frac] = amount.integral_fractional();
-    u0_32 phase = u0_32(x.to_unsigned_scale());
-    f s1 = DynamicData::cheby[idx].interpolate(phase);
-    f s2 = DynamicData::cheby[idx+1].interpolate(phase);
-    return Signal::crossfade(s1, s2, frac);
-  }
+template<>
+inline f warp<CHEBY>(s1_15 x, f amount) {
+  f const fact = f(Data::data->cheby.size() - 2);
+  amount *= fact;
+  auto [idx, frac] = amount.integral_fractional();
+  u0_32 phase = u0_32(x.to_unsigned_scale());
+  f s1 = Data::data->cheby[idx].interpolate(phase);
+  f s2 = Data::data->cheby[idx+1].interpolate(phase);
+  return Signal::crossfade(s1, s2, frac);
+}
 
-  template<>
-  inline f warp<SEGMENT>(s1_15 x, f amount) {
-    constexpr f const fact = f(DynamicData::triangles.size() - 1);
-    amount *= fact;
-    auto [idx, frac] = amount.integral_fractional();
-    u0_32 phase = u0_32(x.to_unsigned_scale());
-    f s1 = DynamicData::triangles[idx].interpolate(phase);
-    f s2 = DynamicData::triangles[idx+1].interpolate(phase);
-    return Signal::crossfade(s1, s2, frac);
-  }
+template<>
+inline f warp<SEGMENT>(s1_15 x, f amount) {
+  f const fact = f(Data::data->triangles.size() - 1);
+  amount *= fact;
+  auto [idx, frac] = amount.integral_fractional();
+  u0_32 phase = u0_32(x.to_unsigned_scale());
+  f s1 = Data::data->triangles[idx].interpolate(phase);
+  f s2 = Data::data->triangles[idx+1].interpolate(phase);
+  return Signal::crossfade(s1, s2, frac);
+}
 };
 
 namespace Antialias {

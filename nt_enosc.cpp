@@ -117,8 +117,10 @@ void calculateStaticRequirements(_NT_staticRequirements& req) {
 void initialise(_NT_staticMemoryPtrs& ptrs, const _NT_staticRequirements& req) {
   // Populate lookup tables in DRAM region
   new (ptrs.dram) DynamicData;
-  // Init normalization factors as unity in DRAM-held DynamicData
+  // Keep a global pointer to the DRAM-held DynamicData instance
   auto* dd = reinterpret_cast<DynamicData*>(ptrs.dram);
+  Data::data = dd;
+  // Init normalization factors as unity
   for (int i = 0; i <= kMaxNumOsc; ++i)
     dd->normalization_factors[i] = 1_f;
 }
@@ -127,7 +129,6 @@ void calculateRequirements(_NT_algorithmRequirements& req, const int32_t*) {
   req.numParameters = kNumParams;
   req.sram          = sizeof(_ntEnosc_Alg);
   req.dtc           = sizeof(_ntEnosc_DTC);
-  req.dram          = 0;
   req.itc           = 0;
 }
 

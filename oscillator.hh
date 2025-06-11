@@ -23,14 +23,14 @@ public:
   s1_15 Process(u0_32 phase, u0_16 feedback) {
     s1_31 fb = lp_.state() * feedback.to_signed();
     phase += fb.to_unsigned() + u0_32(feedback);
-    s1_15 sample = DynamicData::sine.interpolateDiff<s1_15>(phase);
+    s1_15 sample = Data::data->sine.interpolateDiff<s1_15>(phase);
     lp_.Process(sample);
     return sample;
   }
 
   // without Feedback
   s1_15 Process(u0_32 phase) {
-    return DynamicData::sine.interpolateDiff<s1_15>(phase);
+    return Data::data->sine.interpolateDiff<s1_15>(phase);
   }
 };
 

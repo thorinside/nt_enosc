@@ -18,3 +18,8 @@ struct DynamicData {
   // Normalization factors for per-oscillator amplitude scaling (0..kMaxNumOsc)
   Buffer<f, kMaxNumOsc + 1> normalization_factors;
 };
+
+// Pointer to the DynamicData instance placed in DRAM by the plugin
+namespace Data {
+  extern DynamicData* data;
+}
