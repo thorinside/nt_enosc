@@ -1,0 +1,207 @@
+make: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+make: error: couldn't create cache file '/tmp/xcrun_db-OSyPV9YH' (errno=Operation not permitted)
+make: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+make: error: couldn't create cache file '/tmp/xcrun_db-MuZW1QGD' (errno=Operation not permitted)
+2025-06-10 18:26:46.630 xcodebuild[96392:20626213]  DVTFilePathFSEvents: Failed to start fs event stream.
+2025-06-10 18:26:46.718 xcodebuild[96392:20626212] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+mkdir -p plugins
+arm-none-eabi-c++ -std=gnu++17 -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -fno-rtti -fno-exceptions -Os -fPIC -Wall -I../include -c -o plugins/nt_enosc.o nt_enosc.cpp
+nt_enosc.cpp: In function 'void serialise(_NT_algorithm*, _NT_jsonStream&)':
+nt_enosc.cpp:201:5: error: invalid use of incomplete type 'class _NT_jsonStream'
+  201 |     stream.addMemberName("scale_value");
+      |     ^~~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:442:53: note: forward declaration of 'class _NT_jsonStream'
+  442 |     void   (*serialise)( _NT_algorithm* self, class _NT_jsonStream& stream );
+      |                                                     ^~~~~~~~~~~~~~
+nt_enosc.cpp:202:5: error: invalid use of incomplete type 'class _NT_jsonStream'
+  202 |     stream.addNumber(params.scale.value);
+      |     ^~~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:442:53: note: forward declaration of 'class _NT_jsonStream'
+  442 |     void   (*serialise)( _NT_algorithm* self, class _NT_jsonStream& stream );
+      |                                                     ^~~~~~~~~~~~~~
+nt_enosc.cpp:203:5: error: invalid use of incomplete type 'class _NT_jsonStream'
+  203 |     stream.addMemberName("scale_data");
+      |     ^~~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:442:53: note: forward declaration of 'class _NT_jsonStream'
+  442 |     void   (*serialise)( _NT_algorithm* self, class _NT_jsonStream& stream );
+      |                                                     ^~~~~~~~~~~~~~
+nt_enosc.cpp:204:5: error: invalid use of incomplete type 'class _NT_jsonStream'
+  204 |     stream.openArray();
+      |     ^~~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:442:53: note: forward declaration of 'class _NT_jsonStream'
+  442 |     void   (*serialise)( _NT_algorithm* self, class _NT_jsonStream& stream );
+      |                                                     ^~~~~~~~~~~~~~
+nt_enosc.cpp:208:7: error: invalid use of incomplete type 'class _NT_jsonStream'
+  208 |       stream.addNumber(s->get(i).repr());
+      |       ^~~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:442:53: note: forward declaration of 'class _NT_jsonStream'
+  442 |     void   (*serialise)( _NT_algorithm* self, class _NT_jsonStream& stream );
+      |                                                     ^~~~~~~~~~~~~~
+nt_enosc.cpp:210:5: error: invalid use of incomplete type 'class _NT_jsonStream'
+  210 |     stream.closeArray();
+      |     ^~~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:442:53: note: forward declaration of 'class _NT_jsonStream'
+  442 |     void   (*serialise)( _NT_algorithm* self, class _NT_jsonStream& stream );
+      |                                                     ^~~~~~~~~~~~~~
+nt_enosc.cpp: In function 'bool deserialise(_NT_algorithm*, _NT_jsonParse&)':
+nt_enosc.cpp:217:8: error: invalid use of incomplete type 'class _NT_jsonParse'
+  217 |   if (!parse.numberOfObjectMembers(numMembers)) return false;
+      |        ^~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:448:55: note: forward declaration of 'class _NT_jsonParse'
+  448 |     bool   (*deserialise)( _NT_algorithm* self, class _NT_jsonParse& parse );
+      |                                                       ^~~~~~~~~~~~~
+nt_enosc.cpp:219:9: error: invalid use of incomplete type 'class _NT_jsonParse'
+  219 |     if (parse.matchName("scale_value")) {
+      |         ^~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:448:55: note: forward declaration of 'class _NT_jsonParse'
+  448 |     bool   (*deserialise)( _NT_algorithm* self, class _NT_jsonParse& parse );
+      |                                                       ^~~~~~~~~~~~~
+nt_enosc.cpp:221:12: error: invalid use of incomplete type 'class _NT_jsonParse'
+  221 |       if (!parse.number(idx)) return false;
+      |            ^~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:448:55: note: forward declaration of 'class _NT_jsonParse'
+  448 |     bool   (*deserialise)( _NT_algorithm* self, class _NT_jsonParse& parse );
+      |                                                       ^~~~~~~~~~~~~
+nt_enosc.cpp:223:16: error: invalid use of incomplete type 'class _NT_jsonParse'
+  223 |     } else if (parse.matchName("scale_data")) {
+      |                ^~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:448:55: note: forward declaration of 'class _NT_jsonParse'
+  448 |     bool   (*deserialise)( _NT_algorithm* self, class _NT_jsonParse& parse );
+      |                                                       ^~~~~~~~~~~~~
+nt_enosc.cpp:225:12: error: invalid use of incomplete type 'class _NT_jsonParse'
+  225 |       if (!parse.numberOfArrayElements(count)) return false;
+      |            ^~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:448:55: note: forward declaration of 'class _NT_jsonParse'
+  448 |     bool   (*deserialise)( _NT_algorithm* self, class _NT_jsonParse& parse );
+      |                                                       ^~~~~~~~~~~~~
+nt_enosc.cpp:229:14: error: invalid use of incomplete type 'class _NT_jsonParse'
+  229 |         if (!parse.number(v)) return false;
+      |              ^~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:448:55: note: forward declaration of 'class _NT_jsonParse'
+  448 |     bool   (*deserialise)( _NT_algorithm* self, class _NT_jsonParse& parse );
+      |                                                       ^~~~~~~~~~~~~
+nt_enosc.cpp:235:12: error: invalid use of incomplete type 'class _NT_jsonParse'
+  235 |       if (!parse.skipMember()) return false;
+      |            ^~~~~
+In file included from nt_enosc.cpp:3:
+../include/distingnt/api.h:448:55: note: forward declaration of 'class _NT_jsonParse'
+  448 |     bool   (*deserialise)( _NT_algorithm* self, class _NT_jsonParse& parse );
+      |                                                       ^~~~~~~~~~~~~
+In file included from nt_enosc.cpp:11:
+../../enosc/lib/easiglib/filter.hh: In instantiation of 'InterpolatedFloat<FLOAT>::InterpolatedFloat(f) [with FLOAT = SimpleFloat; f = Float]':
+../../enosc/lib/easiglib/filter.hh:312:46:   required from 'InterpolatedFloat<FLOAT>::InterpolatedFloat() [with FLOAT = SimpleFloat]'
+../../enosc/src/oscillator.hh:37:7:   required from 'PolypticOscillator<block_size>::PolypticOscillator(Parameters&) [with int block_size = 8]'
+nt_enosc.cpp:108:30:   required from here
+../../enosc/lib/easiglib/filter.hh:309:9: warning: 'InterpolatedFloat<SimpleFloat>::increment_' will be initialized after [-Wreorder]
+  309 |   FLOAT increment_;
+      |         ^~~~~~~~~~
+../../enosc/lib/easiglib/filter.hh:308:5: warning:   'f InterpolatedFloat<SimpleFloat>::value_' [-Wreorder]
+  308 |   f value_;
+      |     ^~~~~~
+../../enosc/lib/easiglib/filter.hh:311:3: warning:   when initialized here [-Wreorder]
+  311 |   InterpolatedFloat(f value) : increment_(0_f), value_(value) {}
+      |   ^~~~~~~~~~~~~~~~~
+In file included from nt_enosc.cpp:30:
+../../enosc/src/polyptic_oscillator.hh: In instantiation of 'Oscillators<block_size>::FrequencyAccumulator::FrequencyAccumulator(const Scale&, f, f, f, f) [with int block_size = 8; f = Float]':
+../../enosc/src/polyptic_oscillator.hh:158:26:   required from 'void Oscillators<block_size>::Process(const Parameters&, const Scale&, Buffer<Float, block_size>&, Buffer<Float, block_size>&) [with int block_size = 8]'
+../../enosc/src/polyptic_oscillator.hh:319:39:   required from 'void PolypticOscillator<block_size>::Process(Buffer<Frame, block_size>&) [with int block_size = 8]'
+nt_enosc.cpp:185:23:   required from here
+../../enosc/src/polyptic_oscillator.hh:119:18: warning: 'Oscillators<8>::FrequencyAccumulator::scale' will be initialized after [-Wreorder]
+  119 |     Scale const &scale;
+      |                  ^~~~~
+../../enosc/src/polyptic_oscillator.hh:114:7: warning:   'f Oscillators<8>::FrequencyAccumulator::root' [-Wreorder]
+  114 |     f root;
+      |       ^~~~
+../../enosc/src/polyptic_oscillator.hh:121:5: warning:   when initialized here [-Wreorder]
+  121 |     FrequencyAccumulator(Scale const &g, f r, f p, f s, f d) :
+      |     ^~~~~~~~~~~~~~~~~~~~
+In file included from ../../enosc/src/../lib/easiglib/numtypes.hh:9,
+                 from ../../enosc/src/parameters.hh:3,
+                 from nt_enosc.cpp:6:
+../../enosc/src/../lib/easiglib/util.hh: In instantiation of 'Zip<T, Ts>::iterator::iterator(Zip<T, Ts>::iterator::head_iterator, Zip<T, Ts>::iterator::tail_iterator) [with T = Buffer<Float, 8>; Ts = {Buffer<Float, 8>, Buffer<Frame, 8>}; Zip<T, Ts>::iterator::head_iterator = Buffer<Float, 8>::iterator; Zip<T, Ts>::iterator::tail_iterator = Zip<Buffer<Float, 8>, Buffer<Frame, 8> >::iterator]':
+../../enosc/src/../lib/easiglib/util.hh:90:29:   required from 'Zip<T, Ts>::iterator Zip<T, Ts>::begin() [with T = Buffer<Float, 8>; Ts = {Buffer<Float, 8>, Buffer<Frame, 8>}]'
+../../enosc/src/polyptic_oscillator.hh:322:5:   required from 'void PolypticOscillator<block_size>::Process(Buffer<Frame, block_size>&) [with int block_size = 8]'
+nt_enosc.cpp:185:23:   required from here
+../../enosc/src/../lib/easiglib/util.hh:87:19: warning: 'Zip<Buffer<Float, 8>, Buffer<Float, 8>, Buffer<Frame, 8> >::iterator::it' will be initialized after [-Wreorder]
+   87 |     head_iterator it;
+      |                   ^~
+../../enosc/src/../lib/easiglib/util.hh:85:29: warning:   base 'Zip<Buffer<Float, 8>, Buffer<Frame, 8> >::iterator' [-Wreorder]
+   85 |       it(i), tail_iterator(t) {}
+      |                             ^
+../../enosc/src/../lib/easiglib/util.hh:84:5: warning:   when initialized here [-Wreorder]
+   84 |     iterator(head_iterator i, tail_iterator t) :
+      |     ^~~~~~~~
+../../enosc/src/../lib/easiglib/util.hh: In instantiation of 'Zip<T, Ts>::iterator::iterator(Zip<T, Ts>::iterator::head_iterator, Zip<T, Ts>::iterator::tail_iterator) [with T = Buffer<Float, 8>; Ts = {Buffer<Float, 8>}; Zip<T, Ts>::iterator::head_iterator = Buffer<Float, 8>::iterator; Zip<T, Ts>::iterator::tail_iterator = Buffer<Float, 8>::iterator]':
+../../enosc/src/../lib/easiglib/util.hh:90:29:   required from 'Zip<T, Ts>::iterator Zip<T, Ts>::begin() [with T = Buffer<Float, 8>; Ts = {Buffer<Float, 8>}]'
+../../enosc/src/polyptic_oscillator.hh:64:5:   required from 'void PreListenOscillators<block_size>::Process(const Parameters&, PreScale&, Buffer<Float, block_size>&, Buffer<Float, block_size>&) [with int block_size = 8]'
+../../enosc/src/polyptic_oscillator.hh:312:48:   required from 'void PolypticOscillator<block_size>::Process(Buffer<Frame, block_size>&) [with int block_size = 8]'
+nt_enosc.cpp:185:23:   required from here
+../../enosc/src/../lib/easiglib/util.hh:87:19: warning: 'Zip<Buffer<Float, 8>, Buffer<Float, 8> >::iterator::it' will be initialized after [-Wreorder]
+   87 |     head_iterator it;
+      |                   ^~
+../../enosc/src/../lib/easiglib/util.hh:85:29: warning:   base 'Buffer<Float, 8>::iterator' [-Wreorder]
+   85 |       it(i), tail_iterator(t) {}
+      |                             ^
+../../enosc/src/../lib/easiglib/util.hh:84:5: warning:   when initialized here [-Wreorder]
+   84 |     iterator(head_iterator i, tail_iterator t) :
+      |     ^~~~~~~~
+../../enosc/src/../lib/easiglib/util.hh: In instantiation of 'Zip<T, Ts>::iterator::iterator(Zip<T, Ts>::iterator::head_iterator, Zip<T, Ts>::iterator::tail_iterator) [with T = Buffer<Float, 8>; Ts = {Buffer<Frame, 8>}; Zip<T, Ts>::iterator::head_iterator = Buffer<Float, 8>::iterator; Zip<T, Ts>::iterator::tail_iterator = Buffer<Frame, 8>::iterator]':
+../../enosc/src/../lib/easiglib/util.hh:90:29:   required from 'Zip<T, Ts>::iterator Zip<T, Ts>::begin() [with T = Buffer<Float, 8>; Ts = {Buffer<Frame, 8>}]'
+../../enosc/src/../lib/easiglib/util.hh:90:67:   required from 'Zip<T, Ts>::iterator Zip<T, Ts>::begin() [with T = Buffer<Float, 8>; Ts = {Buffer<Float, 8>, Buffer<Frame, 8>}]'
+../../enosc/src/polyptic_oscillator.hh:322:5:   required from 'void PolypticOscillator<block_size>::Process(Buffer<Frame, block_size>&) [with int block_size = 8]'
+nt_enosc.cpp:185:23:   required from here
+../../enosc/src/../lib/easiglib/util.hh:87:19: warning: 'Zip<Buffer<Float, 8>, Buffer<Frame, 8> >::iterator::it' will be initialized after [-Wreorder]
+   87 |     head_iterator it;
+      |                   ^~
+../../enosc/src/../lib/easiglib/util.hh:85:29: warning:   base 'Buffer<Frame, 8>::iterator' [-Wreorder]
+   85 |       it(i), tail_iterator(t) {}
+      |                             ^
+../../enosc/src/../lib/easiglib/util.hh:84:5: warning:   when initialized here [-Wreorder]
+   84 |     iterator(head_iterator i, tail_iterator t) :
+      |     ^~~~~~~~
+../../enosc/src/../lib/easiglib/util.hh: In instantiation of 'Zip<T, Ts>::iterator::iterator(Zip<T, Ts>::iterator::head_iterator, Zip<T, Ts>::iterator::tail_iterator) [with T = Buffer<Float, 8>; Ts = {Buffer<Fixed<UNSIGNED, 0, 16>, 8>, Buffer<Fixed<UNSIGNED, 0, 16>, 8>}; Zip<T, Ts>::iterator::head_iterator = Buffer<Float, 8>::iterator; Zip<T, Ts>::iterator::tail_iterator = Zip<Buffer<Fixed<UNSIGNED, 0, 16>, 8>, Buffer<Fixed<UNSIGNED, 0, 16>, 8> >::iterator]':
+../../enosc/src/../lib/easiglib/util.hh:90:29:   required from 'Zip<T, Ts>::iterator Zip<T, Ts>::begin() [with T = Buffer<Float, 8>; Ts = {Buffer<Fixed<UNSIGNED, 0, 16>, 8>, Buffer<Fixed<UNSIGNED, 0, 16>, 8>}]'
+../../enosc/src/oscillator.hh:91:5:   required from 'void Oscillator::Process(f, f, f, f, f, f, Buffer<Fixed<UNSIGNED, 0, 16>, block_size>&, Buffer<Fixed<UNSIGNED, 0, 16>, block_size>&, Buffer<Float, block_size>&) [with TwistMode twist_mode = FEEDBACK; WarpMode warp_mode = FOLD; int block_size = 8; f = Float]'
+../../enosc/src/oscillator.hh:146:24:   required from 'static void (Oscillator::* OscillatorPair<block_size>::pick_processor(TwistMode, WarpMode))(f, f, f, f, f, f, Buffer<Fixed<UNSIGNED, 0, 16>, block_size>&, Buffer<Fixed<UNSIGNED, 0, 16>, block_size>&, Buffer<Float, block_size>&) [with int block_size = 8; OscillatorPair<block_size>::processor_t = void (Oscillator::*)(Float, Float, Float, Float, Float, Float, Buffer<Fixed<UNSIGNED, 0, 16>, 8>&, Buffer<Fixed<UNSIGNED, 0, 16>, 8>&, Buffer<Float, 8>&); f = Float]'
+../../enosc/src/polyptic_oscillator.hh:51:49:   required from 'void PreListenOscillators<block_size>::Process(const Parameters&, PreScale&, Buffer<Float, block_size>&, Buffer<Float, block_size>&) [with int block_size = 8]'
+../../enosc/src/polyptic_oscillator.hh:312:48:   required from 'void PolypticOscillator<block_size>::Process(Buffer<Frame, block_size>&) [with int block_size = 8]'
+nt_enosc.cpp:185:23:   required from here
+../../enosc/src/../lib/easiglib/util.hh:87:19: warning: 'Zip<Buffer<Float, 8>, Buffer<Fixed<UNSIGNED, 0, 16>, 8>, Buffer<Fixed<UNSIGNED, 0, 16>, 8> >::iterator::it' will be initialized after [-Wreorder]
+   87 |     head_iterator it;
+      |                   ^~
+../../enosc/src/../lib/easiglib/util.hh:85:29: warning:   base 'Zip<Buffer<Fixed<UNSIGNED, 0, 16>, 8>, Buffer<Fixed<UNSIGNED, 0, 16>, 8> >::iterator' [-Wreorder]
+   85 |       it(i), tail_iterator(t) {}
+      |                             ^
+../../enosc/src/../lib/easiglib/util.hh:84:5: warning:   when initialized here [-Wreorder]
+   84 |     iterator(head_iterator i, tail_iterator t) :
+      |     ^~~~~~~~
+../../enosc/src/../lib/easiglib/util.hh: In instantiation of 'Zip<T, Ts>::iterator::iterator(Zip<T, Ts>::iterator::head_iterator, Zip<T, Ts>::iterator::tail_iterator) [with T = Buffer<Fixed<UNSIGNED, 0, 16>, 8>; Ts = {Buffer<Fixed<UNSIGNED, 0, 16>, 8>}; Zip<T, Ts>::iterator::head_iterator = Buffer<Fixed<UNSIGNED, 0, 16>, 8>::iterator; Zip<T, Ts>::iterator::tail_iterator = Buffer<Fixed<UNSIGNED, 0, 16>, 8>::iterator]':
+../../enosc/src/../lib/easiglib/util.hh:90:29:   required from 'Zip<T, Ts>::iterator Zip<T, Ts>::begin() [with T = Buffer<Fixed<UNSIGNED, 0, 16>, 8>; Ts = {Buffer<Fixed<UNSIGNED, 0, 16>, 8>}]'
+../../enosc/src/../lib/easiglib/util.hh:90:67:   required from 'Zip<T, Ts>::iterator Zip<T, Ts>::begin() [with T = Buffer<Float, 8>; Ts = {Buffer<Fixed<UNSIGNED, 0, 16>, 8>, Buffer<Fixed<UNSIGNED, 0, 16>, 8>}]'
+../../enosc/src/oscillator.hh:91:5:   required from 'void Oscillator::Process(f, f, f, f, f, f, Buffer<Fixed<UNSIGNED, 0, 16>, block_size>&, Buffer<Fixed<UNSIGNED, 0, 16>, block_size>&, Buffer<Float, block_size>&) [with TwistMode twist_mode = FEEDBACK; WarpMode warp_mode = FOLD; int block_size = 8; f = Float]'
+../../enosc/src/oscillator.hh:146:24:   required from 'static void (Oscillator::* OscillatorPair<block_size>::pick_processor(TwistMode, WarpMode))(f, f, f, f, f, f, Buffer<Fixed<UNSIGNED, 0, 16>, block_size>&, Buffer<Fixed<UNSIGNED, 0, 16>, block_size>&, Buffer<Float, block_size>&) [with int block_size = 8; OscillatorPair<block_size>::processor_t = void (Oscillator::*)(Float, Float, Float, Float, Float, Float, Buffer<Fixed<UNSIGNED, 0, 16>, 8>&, Buffer<Fixed<UNSIGNED, 0, 16>, 8>&, Buffer<Float, 8>&); f = Float]'
+../../enosc/src/polyptic_oscillator.hh:51:49:   required from 'void PreListenOscillators<block_size>::Process(const Parameters&, PreScale&, Buffer<Float, block_size>&, Buffer<Float, block_size>&) [with int block_size = 8]'
+../../enosc/src/polyptic_oscillator.hh:312:48:   required from 'void PolypticOscillator<block_size>::Process(Buffer<Frame, block_size>&) [with int block_size = 8]'
+nt_enosc.cpp:185:23:   required from here
+../../enosc/src/../lib/easiglib/util.hh:87:19: warning: 'Zip<Buffer<Fixed<UNSIGNED, 0, 16>, 8>, Buffer<Fixed<UNSIGNED, 0, 16>, 8> >::iterator::it' will be initialized after [-Wreorder]
+   87 |     head_iterator it;
+      |                   ^~
+../../enosc/src/../lib/easiglib/util.hh:85:29: warning:   base 'Buffer<Fixed<UNSIGNED, 0, 16>, 8>::iterator' [-Wreorder]
+   85 |       it(i), tail_iterator(t) {}
+      |                             ^
+../../enosc/src/../lib/easiglib/util.hh:84:5: warning:   when initialized here [-Wreorder]
+   84 |     iterator(head_iterator i, tail_iterator t) :
+      |     ^~~~~~~~
+make: *** [plugins/nt_enosc.o] Error 1
