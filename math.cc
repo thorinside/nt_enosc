@@ -10,3 +10,4 @@ Math::Math() {
 }
 
 uint32_t Math::exp2_table[exp2_size];
+
