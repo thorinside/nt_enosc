@@ -278,17 +278,16 @@ void step(_NT_algorithm *self, float *busFrames, int numFramesBy4)
   auto *d = a->dtc;
   int numFrames = numFramesBy4 * 4;
 
-  const float* pitchCV = busFrames + ( self->v[kParamPitchCV] - 1 ) * numFrames;
-  const float* rootCV = busFrames + ( self->v[kParamRootCV] - 1 ) * numFrames;
-
   int pitchCVBus = self->v[kParamPitchCV];
   if (pitchCVBus > 0)
   {
+    const float* pitchCV = busFrames + (pitchCVBus - 1) * numFrames;
     d->params.pitch = Float(pitchCV[0] * 12.0f);
   }
   int rootCVBus = self->v[kParamRootCV];
   if (rootCVBus > 0)
   {
+    const float* rootCV = busFrames + (rootCVBus - 1) * numFrames;
     d->params.root = Float(rootCV[0] * 12.0f);
   }
 
