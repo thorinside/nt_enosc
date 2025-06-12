@@ -1,5 +1,6 @@
 #include <math.h>
 #include <new>
+#include <atomic>
 #include <distingnt/api.h>
 #include <distingnt/serialisation.h>
 
@@ -88,8 +89,8 @@ static const _NT_parameter parameters[] = {
     {.name = "Balance", .min = -100, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
     {.name = "Root", .min = -24, .max = 24, .def = 0, .unit = kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
     {.name = "Pitch", .min = 0, .max = 127, .def = 69, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
-    {.name = "Spread", .min = 0, .max = 36, .def = 0, .unit = kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
-    {.name = "Detune", .min = -12, .max = 12, .def = 0, .unit = kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
+    {.name = "Spread", .min = 0,  .max = 100, .def = 0, .unit = kNT_unitPercent,   .scaling = 0, .enumStrings = NULL},
+    {.name = "Detune", .min = 0,  .max = 100, .def = 0, .unit = kNT_unitPercent,   .scaling = 0, .enumStrings = NULL},
 
     {.name = "Mod mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumMod},
     {.name = "Cross FM", .min = 0, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
@@ -124,7 +125,10 @@ struct _ntEnosc_DTC
   Parameters params;
   PolypticOscillator<kBlockSize> osc;
   Scale *current_scale;
-  _ntEnosc_DTC() : osc(params) {}
+  std::atomic<int> next_num_osc;
+  _ntEnosc_DTC() : osc(params) {
+    next_num_osc = kMaxNumOsc;
+  }
 };
 
 struct _ntEnosc_Alg : public _NT_algorithm
@@ -163,11 +167,14 @@ _NT_algorithm *construct(const _NT_algorithmMemoryPtrs &ptrs,
                          const int32_t *)
 {
   auto *d = new (ptrs.dtc) _ntEnosc_DTC();
-  // Seed default FREE-mode scales to ensure valid default scale tables
-  for (int i = 0; i < kScaleNr; ++i)
+  // Seed all default scales to ensure valid default scale tables
+  for (int i = 0; i < kBankNr; ++i)
   {
-    Parameters::Scale ss{ScaleMode::FREE, i};
-    d->osc.reset_scale(ss);
+    for (int j = 0; j < kScaleNr; ++j)
+    {
+        Parameters::Scale ss{static_cast<ScaleMode>(i), j};
+        d->osc.reset_scale(ss);
+    }
   }
   auto *alg = new (ptrs.sram) _ntEnosc_Alg(d);
   alg->parameters = parameters;
@@ -182,49 +189,85 @@ void parameterChanged(_NT_algorithm *self, int p)
   float v = self->v[p];
   switch (p)
   {
-  case kParamBalance:
-    params.balance = f(v / 100.f);
+  case kParamBalance: {
+    f bb = f(v / 100.f) * 2_f - 1_f;      // -1..1
+    bb *= bb * bb;                        // -1..1 cubic
+    bb *= 4_f;                            // -4..4
+    params.balance = Math::fast_exp2(bb); // 0.0625..16
     break;
+  }
   case kParamRoot:
     params.root = f(v);
     break;
   case kParamPitch:
     params.pitch = f(v);
     break;
-  case kParamSpread:
-    params.spread = f(v);
+  case kParamSpread: {
+    f sp = f(v / 100.f);
+    sp *= 10_f / f(kMaxNumOsc);
+    params.spread = sp * 12_f;
     break;
-  case kParamDetune:
-    params.detune = f(v);
+  }
+  case kParamDetune: {
+    f dt = f(v / 100.f);
+    dt = (dt * dt) * (dt * dt);
+    dt *= 10_f / f(kMaxNumOsc);
+    params.detune = dt;
     break;
+  }
   case kParamModMode:
     params.modulation.mode = ModulationMode(int(v));
     break;
-  case kParamModValue:
-    params.modulation.value = f(v / 100.f);
+  case kParamModValue: {
+    f m = f(v / 100.f);
+    m = Signal::crop_down(0.01_f, m);
+    m *= 6_f / f(params.alt.numOsc);
+    if (params.modulation.mode == ONE)      m *= 6_f;
+    else if (params.modulation.mode == TWO)  m *= 0.9_f;
+    else /* THREE */                        m *= 4_f;
+    params.modulation.value = m;
     break;
-  case kParamScaleMode:
+  }
+  case kParamScaleMode: {
     params.scale.mode = ScaleMode(int(v));
-    a->dtc->osc.reset_scale(params.scale);
+    // Select the newly chosen scale immediately
+    a->dtc->osc.select_current_scale();
     break;
-  case kParamScaleValue:
-    params.scale.value = int(v);
-    a->dtc->osc.reset_scale(params.scale);
+  }
+  case kParamScaleValue: {
+    params.scale.value = int(v + 0.5f);
+    // Select the newly chosen scale immediately
+    a->dtc->osc.select_current_scale();
     break;
+  }
   case kParamTwistMode:
     params.twist.mode = TwistMode(int(v));
     break;
-  case kParamTwistValue:
-    params.twist.value = f(v / 100.f);
+  case kParamTwistValue: {
+    f tw = f(v / 100.f);
+    tw = Signal::crop_down(0.01_f, tw);
+    if (params.twist.mode == FEEDBACK)      tw *= tw * 0.7_f;
+    else if (params.twist.mode == PULSAR)   { tw *= tw; tw = Math::fast_exp2(tw * 6_f); }
+    else /* CRUSH */                        tw *= tw * 0.5_f;
+    params.twist.value = tw;
     break;
+  }
   case kParamWarpMode:
     params.warp.mode = WarpMode(int(v));
     break;
-  case kParamWarpValue:
-    params.warp.value = f(v / 100.f);
+  case kParamWarpValue: {
+    f wr = f(v / 100.f);
+    wr = Signal::crop_down(0.01_f, wr);
+    if (params.warp.mode == FOLD) {
+      wr *= wr;
+      wr *= 0.9_f;
+      wr += 0.004_f;
+    }
+    params.warp.value = wr;
     break;
+  }
   case kParamNumOsc:
-    params.alt.numOsc = int(v);
+    a->dtc->next_num_osc = int(v);
     break;
   case kParamStereoMode:
     params.alt.stereo_mode = SplitMode(int(v));
@@ -255,6 +298,7 @@ void parameterChanged(_NT_algorithm *self, int p)
   case kParamAddNote:
     if (bool(v)) {
       a->dtc->osc.new_note(params.new_note + params.fine_tune);
+      a->dtc->osc.enable_follow_new_note();
     }
     break;
   case kParamRemoveLastNote:
@@ -278,17 +322,24 @@ void step(_NT_algorithm *self, float *busFrames, int numFramesBy4)
   auto *d = a->dtc;
   int numFrames = numFramesBy4 * 4;
 
-  int pitchCVBus = self->v[kParamPitchCV];
-  if (pitchCVBus > 0)
-  {
-    const float* pitchCV = busFrames + (pitchCVBus - 1) * numFrames;
-    d->params.pitch = Float(pitchCV[0] * 12.0f);
-  }
+  d->params.alt.numOsc = d->next_num_osc.load();
+
+  // Set base root from parameter, then add CV
+  d->params.root = f(self->v[kParamRoot]);
   int rootCVBus = self->v[kParamRootCV];
   if (rootCVBus > 0)
   {
     const float* rootCV = busFrames + (rootCVBus - 1) * numFrames;
-    d->params.root = Float(rootCV[0] * 12.0f);
+    d->params.root += f(rootCV[0] * 12.0f);
+  }
+
+  // Set base pitch from parameter, then add CV
+  d->params.pitch = f(self->v[kParamPitch]);
+  int pitchCVBus = self->v[kParamPitchCV];
+  if (pitchCVBus > 0)
+  {
+    const float* pitchCV = busFrames + (pitchCVBus - 1) * numFrames;
+    d->params.pitch += f(pitchCV[0] * 12.0f);
   }
 
   int output = self->v[kParamOutput] - 1;
@@ -329,20 +380,20 @@ void serialise(_NT_algorithm *self, _NT_jsonStream &stream)
 {
   auto *a = (_ntEnosc_Alg *)self;
   auto &params = a->dtc->params;
-  if (params.scale.mode == FREE)
+  stream.addMemberName("scale_mode");
+  stream.addNumber(params.scale.mode);
+  stream.addMemberName("scale_value");
+  stream.addNumber(params.scale.value);
+
+  stream.addMemberName("scale_data");
+  stream.openArray();
+  Scale *s = a->dtc->osc.get_scale(params.scale);
+  int n = s->size();
+  for (int i = 0; i < n; ++i)
   {
-    stream.addMemberName("scale_value");
-    stream.addNumber(params.scale.value);
-    stream.addMemberName("scale_data");
-    stream.openArray();
-    Scale *s = a->dtc->osc.get_scale(params.scale);
-    int n = s->size();
-    for (int i = 0; i < n; ++i)
-    {
-      stream.addNumber(s->get(i).repr());
-    }
-    stream.closeArray();
+    stream.addNumber(s->get(i).repr());
   }
+  stream.closeArray();
 }
 
 bool deserialise(_NT_algorithm *self, _NT_jsonParse &parse)
@@ -353,7 +404,14 @@ bool deserialise(_NT_algorithm *self, _NT_jsonParse &parse)
     return false;
   for (int m = 0; m < numMembers; ++m)
   {
-    if (parse.matchName("scale_value"))
+    if (parse.matchName("scale_mode"))
+    {
+      int mode = 0;
+      if (!parse.number(mode))
+        return false;
+      a->dtc->params.scale.mode = static_cast<ScaleMode>(mode);
+    }
+    else if (parse.matchName("scale_value"))
     {
       int idx = 0;
       if (!parse.number(idx))
