@@ -19,6 +19,7 @@ CXXFLAGS := -std=gnu++17 -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard \
             -MMD -MP -include enosc_plugin_stubs.h
 CXXFLAGS += -I$(INCLUDE_PATH) -I$(BUILD_DIR) -I. \
             -I$(ENOSC_DIR) -I$(ENOSC_DIR)/src -I$(ENOSC_DIR)/lib/easiglib
+CXXFLAGS += -ffunction-sections -fdata-sections
 
 ###############################################################################
 # Generated Enosc data files
@@ -28,15 +29,16 @@ ENOSC_DATA_HH := $(ENOSC_DIR)/data.hh        # generated alongside .cc
 DATA_O        := $(BUILD_DIR)/enosc_data.o
 
 ###############################################################################
-# ---- EXPLICIT list of additional Enosc sources you actually need ----------
-# Add/remove paths here (relative to repo root)
+# ---- EXPLICIT list of additional source files you actually need ------------
 ###############################################################################
-ENOSC_EXTRA_SRCS := \
-    $(ENOSC_DIR)/src/dynamic_data.cc \
-	  $(ENOSC_DIR)/lib/easiglib/dsp.cc \
-	  $(ENOSC_DIR)/lib/easiglib/math.cc
 
-# Map → objects inside build/enosc/…
+# Sources that live *inside* $(ENOSC_DIR)
+ENOSC_EXTRA_SRCS := \
+    $(ENOSC_DIR)/lib/easiglib/dsp.cc \
+    $(ENOSC_DIR)/lib/easiglib/math.cc \
+    $(ENOSC_DIR)/src/dynamic_data.cc
+
+# ---- objects for the files inside enosc/ -----------------------------------
 ENOSC_EXTRA_OBJS := $(patsubst $(ENOSC_DIR)/%, \
                                 $(BUILD_DIR)/$(ENOSC_DIR)/%, \
                                 $(ENOSC_EXTRA_SRCS))
@@ -58,7 +60,7 @@ PLUGIN_O := $(PLUGIN_DIR)/nt_enosc.o
 ###############################################################################
 # Default target
 ###############################################################################
-all: $(PLUGIN_O)
+all: $(PLUGIN_O) postproc
 
 ###############################################################################
 # Link: merge everything into one relocatable object
@@ -69,9 +71,31 @@ $(PLUGIN_O): $(INTERMEDIATE_OBJECTS)
 	$(CXX) -r -o $@ $^
 
 ###############################################################################
-# Pattern rules – project-root .cpp → build/*.o
+# Post-process: move every .bss._ZN11DynamicData* section to .dtc.*
+###############################################################################
+postproc: $(PLUGIN_O)
+	@echo "Relocating DynamicData tables from .bss → .dtc"
+	@secs=$$(arm-none-eabi-objdump -h $< | \
+	         awk '/\.bss\._ZN11DynamicData/ {print $$2}'); \
+	cmd="arm-none-eabi-objcopy"; \
+	for s in $$secs; do \
+	    new=.dtc$${s#.bss}; \
+	    cmd="$$cmd --rename-section $$s=$$new,alloc,load,contents"; \
+	done; \
+	cmd="$$cmd $<"; \
+	echo "$$cmd"; \
+	$$cmd
+
+###############################################################################
+# Pattern rules – project-root .cpp/.cc → build/*.o
 ###############################################################################
 $(BUILD_DIR)/%.o: %.cpp $(ENOSC_DATA_HH)
+	@echo "Compiling $< → $@"
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+# Pattern rule – project-root .cc → build/*.o
+$(BUILD_DIR)/%.o: %.cc $(ENOSC_DATA_HH)
 	@echo "Compiling $< → $@"
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
@@ -120,6 +144,16 @@ check: all
 	@arm-none-eabi-nm $(PLUGIN_O) | grep ' U ' || \
 	    echo "No undefined symbols found (or grep failed)."
 	@echo "(Only _NT_* plus memcpy/memmove/memset should remain undefined.)"
+
+	@echo "Checking .bss footprint…"
+		@bss=$$(arm-none-eabi-size -B $(PLUGIN_O) | awk 'NR==2 {print $$3}'); \
+			printf ".bss size = %s bytes\n" "$$bss"; \
+			if [ "$$bss" -gt 8192 ]; then \
+				echo "❌  .bss exceeds 8 KiB limit!  Loader will reject the plug-in."; \
+				exit 1; \
+			else \
+				echo "✅  .bss within limit."; \
+			fi
 
 .PHONY: all clean check enosc-clean
 

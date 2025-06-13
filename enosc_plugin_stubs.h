@@ -18,6 +18,8 @@
 #define __QADD8(a, b)   ((a) + (b))
 #define __UQADD8(a, b)  ((a) + (b))
 
+#define __ASM __asm__
+
 /* Cortex-M4 DSP half-precision type                                   */
 using __fp16 = float;
 

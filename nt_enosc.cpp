@@ -154,15 +154,7 @@ _NT_algorithm *construct(const _NT_algorithmMemoryPtrs &ptrs,
                          const int32_t *)
 {
   auto *d = new (ptrs.dtc) _ntEnosc_DTC();
-  // Seed all default scales to ensure valid default scale tables - not needed for plugin
-  // for (int i = 0; i < kBankNr; ++i)
-  // {
-  //   for (int j = 0; j < kScaleNr; ++j)
-  //   {
-  //       Parameters::Scale ss{static_cast<ScaleMode>(i), j};
-  //       // d->osc.reset_scale(ss);
-  //   }
-  // }
+
   auto *alg = new (ptrs.sram) _ntEnosc_Alg(d);
   alg->parameters = parameters;
   alg->parameterPages = nullptr;
