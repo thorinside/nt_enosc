@@ -2,7 +2,8 @@
 
 #include "numtypes.hh"
 
-constexpr struct Frame {
+constexpr struct Frame
+{
   s9_23 l = 0._s9_23;
   s9_23 r = 0._s9_23;
 } zero;
@@ -12,79 +13,117 @@ constexpr int kSampleRate = 48000; // Hz
 constexpr int kBlockSize = 8;
 constexpr int kMaxNumOsc = 16;
 
-enum TwistMode { FEEDBACK, PULSAR, CRUSH };
-enum WarpMode { FOLD, CHEBY, SEGMENT };
-enum ScaleMode { TWELVE, OCTAVE, FREE };
-enum ModulationMode { ONE, TWO, THREE };
+enum TwistMode
+{
+  FEEDBACK,
+  PULSAR,
+  CRUSH
+};
+enum WarpMode
+{
+  FOLD,
+  CHEBY,
+  SEGMENT
+};
+enum ScaleMode
+{
+  TWELVE,
+  OCTAVE,
+  FREE
+};
+enum ModulationMode
+{
+  ONE,
+  TWO,
+  THREE
+};
 
-enum SplitMode { ALTERNATE, LOW_HIGH, LOWEST_REST };
+enum SplitMode
+{
+  ALTERNATE,
+  LOW_HIGH,
+  LOWEST_REST
+};
 
-struct SavedDualPotState {
-  enum : uint32_t{ MainMode, CatchUpMode = 0x1234ABCD } restore_catchup_mode = MainMode;
+struct SavedDualPotState
+{
+  enum : uint32_t
+  {
+    MainMode,
+    CatchUpMode = 0x1234ABCD
+  } restore_catchup_mode = MainMode;
   f restore_main_val = 0.5_f;
   f restore_alt_val = 0_f;
-  bool validate() { 
+  bool validate()
+  {
     return restore_main_val >= 0_f && restore_main_val <= 1_f &&
-           restore_alt_val  >= 0_f && restore_alt_val  <= 1_f;
+           restore_alt_val >= 0_f && restore_alt_val <= 1_f;
   }
 };
 
-struct Parameters {
-  f balance;                        // -1..1
-  f root;                        // semitones
-  f pitch;                       // midi note
-  f spread;                      // semitones
-  f detune;                      // semitones
+struct Parameters
+{
+  f balance = 1.0_f; // -1..1
+  f root = 0_f;      // semitones
+  f pitch = 69_f;    // midi note
+  f spread = 0_f;    // semitones
+  f detune = 0_f;    // semitones
 
-  struct Modulation {
-    ModulationMode mode;
-    f value;                 // 0..1
+  struct Modulation
+  {
+    ModulationMode mode = ONE;
+    f value = 0_f; // 0..1
   } modulation;
 
-  struct Scale {
-    ScaleMode mode;
-    int value;                     // 0..9
+  struct Scale
+  {
+    ScaleMode mode = TWELVE;
+    int value = 0; // 0..9
   } scale;
 
-  struct Twist {
-    TwistMode mode;
-    f value;                    // 0..1
+  struct Twist
+  {
+    TwistMode mode = FEEDBACK;
+    f value = 0_f; // 0..1
   } twist;
 
-  struct Warp {
-    WarpMode mode;
-    f value;                    // 0..1
+  struct Warp
+  {
+    WarpMode mode = FOLD;
+    f value = 0_f; // 0..1
   } warp;
 
-  struct AltParameters {
-    int numOsc;// = kMaxNumOsc;      // 0..kMaxNumOsc
-    SplitMode stereo_mode;// = ALTERNATE;
-    SplitMode freeze_mode;// = LOW_HIGH;
-    f crossfade_factor;// = 0.125_f;
+  struct AltParameters
+  {
+    int numOsc = kMaxNumOsc; // 0..kMaxNumOsc
+    SplitMode stereo_mode = ALTERNATE;
+    SplitMode freeze_mode = LOW_HIGH;
+    f crossfade_factor = 0.125_f;
 
-	SavedDualPotState pitch_pot_state;
+    SavedDualPotState pitch_pot_state;
 
-    bool validate() {
-      return
-        numOsc <= kMaxNumOsc &&
-        numOsc > 0 &&
-        ( stereo_mode == ALTERNATE ||
-          stereo_mode == LOW_HIGH ||
-          stereo_mode == LOWEST_REST ) &&
-        ( freeze_mode == ALTERNATE ||
-          freeze_mode == LOW_HIGH ||
-          freeze_mode == LOWEST_REST ) &&
-        crossfade_factor <= 1_f &&
-        crossfade_factor >= 0_f;
+    bool validate()
+    {
+      return numOsc <= kMaxNumOsc &&
+             numOsc > 0 &&
+             (stereo_mode == ALTERNATE ||
+              stereo_mode == LOW_HIGH ||
+              stereo_mode == LOWEST_REST) &&
+             (freeze_mode == ALTERNATE ||
+              freeze_mode == LOW_HIGH ||
+              freeze_mode == LOWEST_REST) &&
+             crossfade_factor <= 1_f &&
+             crossfade_factor >= 0_f;
     }
   };
   AltParameters alt;
   AltParameters default_alt = {kMaxNumOsc, ALTERNATE, LOW_HIGH, 0.125_f};
 
-  f new_note, fine_tune;
+  f new_note = 0_f, fine_tune = 0_f;
 };
 
-enum EventType {
+enum EventType
+{
   ButtonPush,
   ButtonRelease,
   ButtonTimeout,
@@ -103,12 +142,14 @@ enum EventType {
   CalibrationStepDone,
 };
 
-struct Event {
+struct Event
+{
   EventType type;
   int data;
 };
 
-enum CalibratorState {
+enum CalibratorState
+{
   NOT_CALIBRATING,
   CALIBRATING_PITCH_UNPATCHED,
   CALIBRATING_ROOT_UNPATCHED,
@@ -117,4 +158,3 @@ enum CalibratorState {
   CALIBRATING_ROOT_OFFSET,
   CALIBRATING_ROOT_SLOPE,
 };
-
