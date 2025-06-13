@@ -1,29 +1,24 @@
+#include "enosc_plugin_stubs.h"
+
 #include <math.h>
 #include <new>
 #include <atomic>
 #include <distingnt/api.h>
 #include <distingnt/serialisation.h>
 
-// Include EnOSC core engine and DSP support
-#include "./enosc/src/parameters.hh"
+#include "parameters.hh"
 #include "./enosc/lib/easiglib/util.hh"
 #include "./enosc/lib/easiglib/buffer.hh"
 #include "./enosc/lib/easiglib/bitfield.hh"
-#include "./enosc/lib/easiglib/units.hh"
 #include "./enosc/lib/easiglib/filter.hh"
 #include "./enosc/lib/easiglib/dsp.hh"
 #include "./enosc/lib/easiglib/signal.hh"
 #include "./enosc/lib/easiglib/math.hh"
 #include "./enosc/lib/easiglib/numtypes.hh"
-#include "./enosc/lib/easiglib/persistent_storage.hh"
 #include "./enosc/data.hh"
-#include "./enosc/lib/easiglib/dsp.cc"
-#include "./enosc/lib/easiglib/numtypes.cc"
-#include "./enosc/lib/easiglib/math.cc"
 #include "./enosc/src/oscillator.hh"
 #include "./enosc/src/distortion.hh"
 #include "./enosc/src/quantizer.hh"
-
 #include "./enosc/src/polyptic_oscillator.hh"
 
 // Plugin parameters mapping to EnOSC engine Parameters
@@ -103,7 +98,7 @@ static const _NT_parameter parameters[] = {
     {.name = "Warp mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumWarp},
     {.name = "Warp", .min = 0, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
 
-    {.name = "Num Osc", .min = 1, .max = kMaxNumOsc, .def = kMaxNumOsc, .unit = kNT_unitNone, .scaling = 0, .enumStrings = NULL},
+    {.name = "Num Osc", .min = 1, .max = 16, .def = 16, .unit = kNT_unitNone, .scaling = 0, .enumStrings = NULL},
     {.name = "Stereo mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumSplit},
     {.name = "Freeze mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumSplit},
     {.name = "Freeze", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumFreeze},
@@ -126,7 +121,7 @@ struct _ntEnosc_DTC
   Scale *current_scale;
   std::atomic<int> next_num_osc;
   _ntEnosc_DTC() : osc(params) {
-    next_num_osc = kMaxNumOsc;
+    next_num_osc = 16;
   }
 };
 
@@ -159,15 +154,15 @@ _NT_algorithm *construct(const _NT_algorithmMemoryPtrs &ptrs,
                          const int32_t *)
 {
   auto *d = new (ptrs.dtc) _ntEnosc_DTC();
-  // Seed all default scales to ensure valid default scale tables
-  for (int i = 0; i < kBankNr; ++i)
-  {
-    for (int j = 0; j < kScaleNr; ++j)
-    {
-        Parameters::Scale ss{static_cast<ScaleMode>(i), j};
-        d->osc.reset_scale(ss);
-    }
-  }
+  // Seed all default scales to ensure valid default scale tables - not needed for plugin
+  // for (int i = 0; i < kBankNr; ++i)
+  // {
+  //   for (int j = 0; j < kScaleNr; ++j)
+  //   {
+  //       Parameters::Scale ss{static_cast<ScaleMode>(i), j};
+  //       // d->osc.reset_scale(ss);
+  //   }
+  // }
   auto *alg = new (ptrs.sram) _ntEnosc_Alg(d);
   alg->parameters = parameters;
   alg->parameterPages = nullptr;
@@ -196,14 +191,14 @@ void parameterChanged(_NT_algorithm *self, int p)
     break;
   case kParamSpread: {
     f sp = f(v / 100.f);
-    sp *= 10_f / f(kMaxNumOsc);
+    sp *= 10_f / f(16);
     params.spread = sp * 12_f;
     break;
   }
   case kParamDetune: {
     f dt = f(v / 100.f);
     dt = (dt * dt) * (dt * dt);
-    dt *= 10_f / f(kMaxNumOsc);
+    dt *= 10_f / f(16);
     params.detune = dt;
     break;
   }
@@ -307,28 +302,11 @@ void parameterChanged(_NT_algorithm *self, int p)
 void step(_NT_algorithm *self, float *busFrames, int numFramesBy4)
 {
   _ntEnosc_Alg *a = (_ntEnosc_Alg *)self;
-  auto *d = a->dtc;
   int numFrames = numFramesBy4 * 4;
 
-  d->params.alt.numOsc = d->next_num_osc.load();
-
-  // Set base root from parameter, then add CV
-  d->params.root = f(self->v[kParamRoot]);
-  int rootCVBus = self->v[kParamRootCV];
-  if (rootCVBus > 0)
-  {
-    const float* rootCV = busFrames + (rootCVBus - 1) * numFrames;
-    d->params.root += f(rootCV[0] * 12.0f);
-  }
-
-  // Set base pitch from parameter, then add CV
-  d->params.pitch = f(self->v[kParamPitch]);
-  int pitchCVBus = self->v[kParamPitchCV];
-  if (pitchCVBus > 0)
-  {
-    const float* pitchCV = busFrames + (pitchCVBus - 1) * numFrames;
-    d->params.pitch += f(pitchCV[0] * 12.0f);
-  }
+  a->dtc->params.alt.numOsc = a->dtc->next_num_osc.load();
+  a->dtc->params.root = f(self->v[kParamRoot]);
+  a->dtc->params.pitch = f(self->v[kParamPitch]);
 
   int output = self->v[kParamOutput] - 1;
   float *outL = busFrames + output * numFrames;
@@ -339,7 +317,7 @@ void step(_NT_algorithm *self, float *busFrames, int numFramesBy4)
 
   for (int i = 0; i < numFrames; i += kBlockSize)
   {
-    d->osc.Process(block);
+    a->dtc->osc.Process(block);
     for (int j = 0; j < kBlockSize; ++j)
     {
       int frameIndex = i + j;
@@ -363,70 +341,70 @@ void step(_NT_algorithm *self, float *busFrames, int numFramesBy4)
   }
 }
 
-// JSON (de)serialization for custom FREE-mode scales
 void serialise(_NT_algorithm *self, _NT_jsonStream &stream)
 {
-  auto *a = (_ntEnosc_Alg *)self;
+  _ntEnosc_Alg *a = (_ntEnosc_Alg *)self;
   auto &params = a->dtc->params;
+  stream.addMemberName("balance");
+  stream.addNumber(params.balance.repr());
+  stream.addMemberName("root");
+  stream.addNumber(params.root.repr());
+  stream.addMemberName("pitch");
+  stream.addNumber(params.pitch.repr());
+  stream.addMemberName("spread");
+  stream.addNumber(params.spread.repr());
+  stream.addMemberName("detune");
+  stream.addNumber(params.detune.repr());
+  stream.addMemberName("mod_mode");
+  stream.addNumber(static_cast<int>(params.modulation.mode));
+  stream.addMemberName("mod_val");
+  stream.addNumber(params.modulation.value.repr());
   stream.addMemberName("scale_mode");
-  stream.addNumber(params.scale.mode);
-  stream.addMemberName("scale_value");
+  stream.addNumber(static_cast<int>(params.scale.mode));
+  stream.addMemberName("scale_val");
   stream.addNumber(params.scale.value);
-
-  stream.addMemberName("scale_data");
-  stream.openArray();
-  Scale *s = a->dtc->osc.get_scale(params.scale);
-  int n = s->size();
-  for (int i = 0; i < n; ++i)
-  {
-    stream.addNumber(s->get(i).repr());
-  }
-  stream.closeArray();
+  stream.addMemberName("twist_mode");
+  stream.addNumber(static_cast<int>(params.twist.mode));
+  stream.addMemberName("twist_val");
+  stream.addNumber(params.twist.value.repr());
+  stream.addMemberName("warp_mode");
+  stream.addNumber(static_cast<int>(params.warp.mode));
+  stream.addMemberName("warp_val");
+  stream.addNumber(params.warp.value.repr());
+  stream.addMemberName("num_osc");
+  stream.addNumber(params.alt.numOsc);
+  stream.addMemberName("stereo_mode");
+  stream.addNumber(static_cast<int>(params.alt.stereo_mode));
+  stream.addMemberName("freeze_mode");
+  stream.addNumber(static_cast<int>(params.alt.freeze_mode));
 }
 
 bool deserialise(_NT_algorithm *self, _NT_jsonParse &parse)
 {
-  auto *a = (_ntEnosc_Alg *)self;
+  _ntEnosc_Alg *a = (_ntEnosc_Alg *)self;
+  auto &params = a->dtc->params;
   int numMembers;
-  if (!parse.numberOfObjectMembers(numMembers))
-    return false;
-  for (int m = 0; m < numMembers; ++m)
-  {
-    if (parse.matchName("scale_mode"))
-    {
-      int mode = 0;
-      if (!parse.number(mode))
-        return false;
-      a->dtc->params.scale.mode = static_cast<ScaleMode>(mode);
-    }
-    else if (parse.matchName("scale_value"))
-    {
-      int idx = 0;
-      if (!parse.number(idx))
-        return false;
-      a->dtc->params.scale.value = idx;
-    }
-    else if (parse.matchName("scale_data"))
-    {
-      int count = 0;
-      if (!parse.numberOfArrayElements(count))
-        return false;
-      PreScale p;
-      for (int i = 0; i < count; ++i)
-      {
-        float v = 0.0f;
-        if (!parse.number(v))
-          return false;
-        p.add(f(v));
-      }
-      bool wrap = (a->dtc->params.scale.mode == OCTAVE);
-      p.copy_to(a->dtc->osc.get_scale(a->dtc->params.scale), wrap);
-    }
-    else
-    {
-      if (!parse.skipMember())
-        return false;
-    }
+  if (!parse.numberOfObjectMembers(numMembers)) return false;
+  for (int m = 0; m < numMembers; ++m) {
+    float fv;
+    int iv;
+    if (parse.matchName("balance") && parse.number(fv)) params.balance = f(fv);
+    else if (parse.matchName("root") && parse.number(fv)) params.root = f(fv);
+    else if (parse.matchName("pitch") && parse.number(fv)) params.pitch = f(fv);
+    else if (parse.matchName("spread") && parse.number(fv)) params.spread = f(fv);
+    else if (parse.matchName("detune") && parse.number(fv)) params.detune = f(fv);
+    else if (parse.matchName("mod_mode") && parse.number(iv)) params.modulation.mode = static_cast<ModulationMode>(iv);
+    else if (parse.matchName("mod_val") && parse.number(fv)) params.modulation.value = f(fv);
+    else if (parse.matchName("scale_mode") && parse.number(iv)) params.scale.mode = static_cast<ScaleMode>(iv);
+    else if (parse.matchName("scale_val") && parse.number(iv)) params.scale.value = iv;
+    else if (parse.matchName("twist_mode") && parse.number(iv)) params.twist.mode = static_cast<TwistMode>(iv);
+    else if (parse.matchName("twist_val") && parse.number(fv)) params.twist.value = f(fv);
+    else if (parse.matchName("warp_mode") && parse.number(iv)) params.warp.mode = static_cast<WarpMode>(iv);
+    else if (parse.matchName("warp_val") && parse.number(fv)) params.warp.value = f(fv);
+    else if (parse.matchName("num_osc") && parse.number(iv)) params.alt.numOsc = iv;
+    else if (parse.matchName("stereo_mode") && parse.number(iv)) params.alt.stereo_mode = static_cast<SplitMode>(iv);
+    else if (parse.matchName("freeze_mode") && parse.number(iv)) params.alt.freeze_mode = static_cast<SplitMode>(iv);
+    else if (!parse.skipMember()) return false;
   }
   return true;
 }
