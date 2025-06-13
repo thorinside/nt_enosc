@@ -1,0 +1,21 @@
+**Product Requirements Document: EnOSC NT Parameter Porting**
+
+**1. Overview**
+The goal of this project is to ensure that the parameter handling in the Disting NT port of the Ensemble Oscillator (`nt_enosc.cpp`) is a faithful and accurate port of the original hardware implementation. The NT port uses standard parameters with `min`, `max`, and `def` values, which are then processed in the `parameterChanged` function. The original hardware uses potentiometers, and its `Process` functions for the controls contain specific scaling, mapping, and curve logic. This project will align the NT port's behavior with the original hardware's logic.
+
+**2. Key Objectives**
+- The scaling and range of each parameter in `nt_enosc.cpp` should match the logic found in the original hardware's control handling code.
+- This includes parameters like Balance, Spread, Detune, Twist, Warp, and modulation values.
+- The `_NT_parameter` definitions (min, max, scaling) and the corresponding logic inside the `parameterChanged` function in `nt_enosc.cpp` must be updated to reflect any discrepancies found.
+- The user experience when turning a knob on the Disting NT should feel as close as possible to turning the corresponding knob on the original 4ms Ensemble Oscillator hardware.
+
+**3. Scope**
+- **In Scope:**
+    - Analysis of the original hardware's control processing code (likely found in `enosc/src/`).
+    - Comparison against the current implementation in `nt_enosc.cpp`.
+    - Modifying `parameters[]` definitions in `nt_enosc.cpp`.
+    - Modifying the `parameterChanged` switch-case block in `nt_enosc.cpp`.
+- **Out of Scope:**
+    - Changes to the core oscillator DSP engine.
+    - Changes to CV input handling, as this is managed differently on the NT platform.
+    - Changes to files outside the project's root directory (i.e., only `nt_enosc.cpp`, `parameters.hh`, etc. should be modified). 

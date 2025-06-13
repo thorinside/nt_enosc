@@ -1,6 +1,3 @@
 [submodule "distingNT_API"]
 	path = distingNT_API
 	url = https://github.com/expertsleepersltd/distingNT_API.git
-[submodule "enosc"]
-	path = enosc
-	url = https://github.com/4ms/enosc

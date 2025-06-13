@@ -5,27 +5,26 @@
 #include <distingnt/serialisation.h>
 
 // Include EnOSC core engine and DSP support
-#include "parameters.hh"
-#include "util.hh"
-#include "buffer.hh"
-#include "bitfield.hh"
-#include "units.hh"
-#include "filter.hh"
-#include "dsp.hh"
-#include "signal.hh"
-#include "math.hh"
-#include "numtypes.hh"
-#include "persistent_storage.hh"
-#include "dynamic_data.hh"
-#include "dsp.cc"
-#include "numtypes.cc"
-#include "dynamic_data.cc"
-#include "math.cc"
-#include "oscillator.hh"
-#include "distortion.hh"
-#include "quantizer.hh"
+#include "./enosc/src/parameters.hh"
+#include "./enosc/lib/easiglib/util.hh"
+#include "./enosc/lib/easiglib/buffer.hh"
+#include "./enosc/lib/easiglib/bitfield.hh"
+#include "./enosc/lib/easiglib/units.hh"
+#include "./enosc/lib/easiglib/filter.hh"
+#include "./enosc/lib/easiglib/dsp.hh"
+#include "./enosc/lib/easiglib/signal.hh"
+#include "./enosc/lib/easiglib/math.hh"
+#include "./enosc/lib/easiglib/numtypes.hh"
+#include "./enosc/lib/easiglib/persistent_storage.hh"
+#include "./enosc/data.hh"
+#include "./enosc/lib/easiglib/dsp.cc"
+#include "./enosc/lib/easiglib/numtypes.cc"
+#include "./enosc/lib/easiglib/math.cc"
+#include "./enosc/src/oscillator.hh"
+#include "./enosc/src/distortion.hh"
+#include "./enosc/src/quantizer.hh"
 
-#include "polyptic_oscillator.hh"
+#include "./enosc/src/polyptic_oscillator.hh"
 
 // Plugin parameters mapping to EnOSC engine Parameters
 enum
@@ -139,19 +138,12 @@ struct _ntEnosc_Alg : public _NT_algorithm
 
 void calculateStaticRequirements(_NT_staticRequirements &req)
 {
-  req.dram = sizeof(DynamicData);
+  req.dram = 0;
 }
 
 void initialise(_NT_staticMemoryPtrs &ptrs, const _NT_staticRequirements &req)
 {
-  // Populate lookup tables in DRAM region
-  new (ptrs.dram) DynamicData;
-  // Keep a global pointer to the DRAM-held DynamicData instance
-  auto *dd = reinterpret_cast<DynamicData *>(ptrs.dram);
-  Data::data = dd;
-  // Init normalization factors as unity
-  for (int i = 0; i <= kMaxNumOsc; ++i)
-    dd->normalization_factors[i] = 1_f;
+  // All data is now static, so no initialisation is needed.
 }
 
 void calculateRequirements(_NT_algorithmRequirements &req, const int32_t *)
@@ -230,14 +222,10 @@ void parameterChanged(_NT_algorithm *self, int p)
   }
   case kParamScaleMode: {
     params.scale.mode = ScaleMode(int(v));
-    // Select the newly chosen scale immediately
-    a->dtc->osc.select_current_scale();
     break;
   }
   case kParamScaleValue: {
     params.scale.value = int(v + 0.5f);
-    // Select the newly chosen scale immediately
-    a->dtc->osc.select_current_scale();
     break;
   }
   case kParamTwistMode:
