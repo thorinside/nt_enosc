@@ -1,29 +1,28 @@
 #include "enosc_plugin_stubs.h"
 
-#include <math.h>
-#include <new>
 #include <atomic>
 #include <distingnt/api.h>
 #include <distingnt/serialisation.h>
+#include <math.h>
+#include <new>
 
-#include "parameters.hh"
-#include "./enosc/lib/easiglib/util.hh"
-#include "./enosc/lib/easiglib/buffer.hh"
+#include "./enosc/data.hh"
 #include "./enosc/lib/easiglib/bitfield.hh"
-#include "./enosc/lib/easiglib/filter.hh"
+#include "./enosc/lib/easiglib/buffer.hh"
 #include "./enosc/lib/easiglib/dsp.hh"
-#include "./enosc/lib/easiglib/signal.hh"
+#include "./enosc/lib/easiglib/filter.hh"
 #include "./enosc/lib/easiglib/math.hh"
 #include "./enosc/lib/easiglib/numtypes.hh"
-#include "./enosc/data.hh"
-#include "./enosc/src/oscillator.hh"
+#include "./enosc/lib/easiglib/signal.hh"
+#include "./enosc/lib/easiglib/util.hh"
 #include "./enosc/src/distortion.hh"
-#include "./enosc/src/quantizer.hh"
+#include "./enosc/src/oscillator.hh"
+#include "./enosc/src/parameters.hh"
 #include "./enosc/src/polyptic_oscillator.hh"
+#include "./enosc/src/quantizer.hh"
 
 // Plugin parameters mapping to EnOSC engine Parameters
-enum
-{
+enum {
   kParamPitchCV,
   kParamRootCV,
 
@@ -113,6 +112,9 @@ static const _NT_parameter parameters[] = {
 };
 // clang-format off
 
+// Forward declaration for parameterChanged
+void parameterChanged(_NT_algorithm *self, int p);
+
 // DTC struct holds algorithm state and oscillator instance
 struct _ntEnosc_DTC
 {
@@ -120,8 +122,10 @@ struct _ntEnosc_DTC
   PolypticOscillator<kBlockSize> osc;
   Scale *current_scale;
   std::atomic<int> next_num_osc;
-  _ntEnosc_DTC() : osc(params) {
-    next_num_osc = 16;
+  _ntEnosc_DTC(_NT_algorithm *self) : osc(params) {
+    for (int i = 0; i < kNumParams; ++i) {
+      parameterChanged(self, i);
+    }
   }
 };
 
@@ -153,11 +157,11 @@ _NT_algorithm *construct(const _NT_algorithmMemoryPtrs &ptrs,
                          const _NT_algorithmRequirements &req,
                          const int32_t *)
 {
-  auto *d = new (ptrs.dtc) _ntEnosc_DTC();
-
-  auto *alg = new (ptrs.sram) _ntEnosc_Alg(d);
+  auto *alg = new (ptrs.sram) _ntEnosc_Alg(nullptr);
   alg->parameters = parameters;
   alg->parameterPages = nullptr;
+  auto *d = new (ptrs.dtc) _ntEnosc_DTC(alg);
+  alg->dtc = d;
   return alg;
 }
 
@@ -197,17 +201,33 @@ void parameterChanged(_NT_algorithm *self, int p)
   case kParamModMode:
     params.modulation.mode = ModulationMode(int(v));
     break;
+    
   case kParamModValue: {
-    f m = f(v / 100.f);
-    m = Signal::crop_down(0.01_f, m);
-    m *= 6_f / f(params.alt.numOsc);
-    if (params.modulation.mode == ONE)      m *= 6_f;
-    else if (params.modulation.mode == TWO)  m *= 0.9_f;
-    else /* THREE */                        m *= 4_f;
+    f m = f(v / 100.f); // 0 … 1 from the panel
+
+    /* 1. Let 0 % really be silence but give low end more resolution          *
+     *    (square curve – same trick we used for Twist/Warp).                 */
+    m *= m;
+
+    /* 2. Normalise for polyphony so the same 50 % sounds similar whether     *
+     *    you run 1 or 16 oscillators.                                        */
+    m *= 4_f / f(params.alt.numOsc);   // 4 instead of 6 → gentler overall
+
+    /* 3. Mode-specific trims. These are now *relative* multipliers,          *
+     *    not 6 × 0.9 × 4 swings.                                             */
+    switch (params.modulation.mode) {
+      case ONE:    m *= 2.5_f; break;   // bright metallic, like the original
+      case TWO:    m *= 1.0_f; break;   // classic "DX" cross-mod
+      case THREE:  m *= 1.8_f; break;   // richer but still controlled
+    }
+
+    /* 4. Safety – the engine stays well-behaved < 5. */
+    if (m > 4.999_f) m = 4.999_f;
+
     params.modulation.value = m;
     break;
-  }
-  case kParamScaleMode: {
+
+}  case kParamScaleMode: {
     params.scale.mode = ScaleMode(int(v));
     break;
   }
@@ -215,34 +235,65 @@ void parameterChanged(_NT_algorithm *self, int p)
     params.scale.value = int(v + 0.5f);
     break;
   }
-  case kParamTwistMode:
+case kParamTwistMode:
     params.twist.mode = TwistMode(int(v));
     break;
-  case kParamTwistValue: {
+
+  case kParamTwistValue:
+  {
+    /* 0 … 100 % from the UI → 0 … 1.0 internal */
     f tw = f(v / 100.f);
-    tw = Signal::crop_down(0.01_f, tw);
-    if (params.twist.mode == FEEDBACK)      tw *= tw * 0.7_f;
-    else if (params.twist.mode == PULSAR)   { tw *= tw; tw = Math::fast_exp2(tw * 6_f); }
-    else /* CRUSH */                        tw *= tw * 0.5_f;
+
+    /* No forced floor: let 0 % really be 0 for a clean sine. */
+    if (params.twist.mode == FEEDBACK)
+    {
+      /* gentle quadratic curve, same as before but floor removed */
+      tw *= tw * 0.7_f;
+    }
+    else if (params.twist.mode == PULSAR)
+    {
+      /* 0 … 1  →  1 … 64  (exp2(6 · x)) */
+      tw = Math::fast_exp2(tw * 6_f);
+      if (tw < 1_f)    /* guarantee spec range 1…64 */
+        tw = 1_f;
+    }
+    else /* CRUSH */
+    {
+      tw = tw * tw * 0.5_f;
+    }
     params.twist.value = tw;
     break;
   }
+
+  /* ──────────────────────────────────── WARP ──────────────────────────────────────────────────── */
   case kParamWarpMode:
     params.warp.mode = WarpMode(int(v));
     break;
-  case kParamWarpValue: {
+
+  case kParamWarpValue:
+  {
+    /* 0 … 100 % → 0 … 1.0 */
     f wr = f(v / 100.f);
-    wr = Signal::crop_down(0.01_f, wr);
-    if (params.warp.mode == FOLD) {
-      wr *= wr;
-      wr *= 0.9_f;
-      wr += 0.004_f;
+
+    if (params.warp.mode == FOLD)
+    {
+      /* keep the old curve, but now it really starts at 0 % = 0  */
+      wr = wr * wr;            // square for finer low-end control
+      wr = wr * 0.9_f + 0.004_f;
+      if (wr > 0.999_f)        // absolute safety limit
+        wr = 0.999_f;
+    }
+    else  /* CHEBY or SEGMENT */
+    {
+      /* Clamp strictly below 1.0 to stay inside the lookup-table bounds */
+      if (wr >= 0.999_f)
+        wr = 0.999_f;
     }
     params.warp.value = wr;
     break;
   }
   case kParamNumOsc:
-    a->dtc->next_num_osc = int(v);
+    params.alt.numOsc = static_cast<int>(v);
     break;
   case kParamStereoMode:
     params.alt.stereo_mode = SplitMode(int(v));
@@ -291,46 +342,93 @@ void parameterChanged(_NT_algorithm *self, int p)
   }
 }
 
-void step(_NT_algorithm *self, float *busFrames, int numFramesBy4)
+// // ────────────────────────────────────────────────────────────────
+// //  TEST STEP  –  fixed 440 Hz reference sine
+// // ────────────────────────────────────────────────────────────────
+// #include <math.h>   // for sinf, M_PI
+//
+// void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
+// {
+//   constexpr float kSampleRate = 48000.0f;      // NT runs at 48 kHz
+//   constexpr float kFreq       = 440.0f;        // reference A4
+//   constexpr float kAmp        = 0.5f;          // –6 dBFS → plenty of headroom
+//   constexpr float kTwoPiOverSR= 2.0f * M_PI / kSampleRate;
+//
+//   static float phase = 0.0f;                   // keeps continuity between calls
+//
+//   const int numFrames = numFramesBy4 * 4;
+//
+//   /* ----------------- choose which stereo pair to write to --------------- */
+//   const int chan  = self->v[kParamOutput] - 1; // 0-based index (UI is 1-based)
+//   float* outL = busFrames + chan * numFrames;
+//   float* outR = outL      + numFrames;
+//
+//   const bool replace = self->v[kParamOutputMode];  // 0 = mix, 1 = replace
+//
+//   /* ---------------------------- generate tone --------------------------- */
+//   for (int n = 0; n < numFrames; ++n)
+//   {
+//     const float sample = kAmp * sinf( phase );
+//     phase += kTwoPiOverSR * kFreq;
+//     if (phase > 2.0f * M_PI)       // wrap to avoid precision loss
+//       phase -= 2.0f * M_PI;
+//
+//     if (replace) {
+//       outL[n] = sample;
+//       outR[n] = sample;
+//     } else {
+//       outL[n] += sample;
+//       outR[n] += sample;
+//     }
+//   }
+// }
+
+void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
 {
-  _ntEnosc_Alg *a = (_ntEnosc_Alg *)self;
-  int numFrames = numFramesBy4 * 4;
+    auto* alg = (_ntEnosc_Alg*)self;
+    auto* dtc = alg->dtc;
 
-  a->dtc->params.alt.numOsc = a->dtc->next_num_osc.load();
-  a->dtc->params.root = f(self->v[kParamRoot]);
-  a->dtc->params.pitch = f(self->v[kParamPitch]);
+    const int numFrames = numFramesBy4 * 4;
+    const int chan      = self->v[kParamOutput] - 1;        // 1-based in UI
+    float* outL = busFrames + chan * numFrames;             // block-per-channel layout
+    float* outR = outL      + numFrames;
+    const bool replace = self->v[kParamOutputMode];         // 0 = mix, 1 = replace
 
-  int output = self->v[kParamOutput] - 1;
-  float *outL = busFrames + output * numFrames;
-  float *outR = outL + numFrames;
-  bool replace = self->v[kParamOutputMode] != 0;
+    /* these three don't need smoothing but *can* change block-by-block      */
+    dtc->params.alt.numOsc = dtc->next_num_osc.load(std::memory_order_relaxed);
+    dtc->params.root       = f( self->v[kParamRoot]  );
+    dtc->params.pitch      = f( self->v[kParamPitch] );
 
-  Buffer<Frame, kBlockSize> block;
+    /* --------------------------------------------------------------------
+     * 2.  Generate audio exactly in 8-sample chunks (kBlockSize) – the same
+     *     cadence the original STM32 firmware uses.
+     * ------------------------------------------------------------------ */
+    constexpr int BS = kBlockSize;
+    static Buffer<Frame, BS> blk;                 // persistent scratch
 
-  for (int i = 0; i < numFrames; i += kBlockSize)
-  {
-    a->dtc->osc.Process(block);
-    for (int j = 0; j < kBlockSize; ++j)
+    for (int frame = 0; frame < numFrames; frame += BS)
     {
-      int frameIndex = i + j;
-      if (frameIndex < numFrames)
-      {
-        float sL = f(block[j].l).repr();
-        float sR = f(block[j].r).repr();
+        dtc->osc.Process( blk );                  // fills blk[0 .. BS-1]
 
-        if (replace)
+        const int valid = std::min( BS, numFrames - frame );
+        for (int i = 0; i < valid; ++i)
         {
-          outL[frameIndex] = sL;
-          outR[frameIndex] = sR;
+            // Convert s9_23 → float; *do not* add any extra scaling.
+            const float l = Float( blk[i].l ).repr();
+            const float r = Float( blk[i].r ).repr();
+
+            if (replace)
+            {
+                outL[frame + i] = l;
+                outR[frame + i] = r;
+            }
+            else
+            {
+                outL[frame + i] += l;
+                outR[frame + i] += r;
+            }
         }
-        else
-        {
-          outL[frameIndex] += sL;
-          outR[frameIndex] += sR;
-        }
-      }
     }
-  }
 }
 
 void serialise(_NT_algorithm *self, _NT_jsonStream &stream)
