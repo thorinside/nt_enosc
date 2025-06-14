@@ -117,15 +117,14 @@ static const _NT_parameter parameters[] = {
 void parameterChanged(_NT_algorithm *self, int p);
 
 // DTC struct holds algorithm state and oscillator instance
-struct _ntEnosc_DTC
+struct _ntEnosc_DTC : public DynamicData
 {
-  DynamicData data;
   Parameters params;
   PolypticOscillator<kBlockSize> osc;
   Scale *current_scale;
   std::atomic<int> next_num_osc;
   Buffer<Frame, kBlockSize> blk;
-  _ntEnosc_DTC(_NT_algorithm *self) : osc(params) {
+  _ntEnosc_DTC(_NT_algorithm *self) : DynamicData(), osc(params) {
   }
 };
 
@@ -342,71 +341,51 @@ case kParamTwistMode:
   }
 }
 
-// // ────────────────────────────────────────────────────────────────
-// //  TEST STEP  –  fixed 440 Hz reference sine
-// // ────────────────────────────────────────────────────────────────
-// #include <math.h>   // for sinf, M_PI
-//
-// void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
-// {
-//   constexpr float kSampleRate = 48000.0f;      // NT runs at 48 kHz
-//   constexpr float kFreq       = 440.0f;        // reference A4
-//   constexpr float kAmp        = 0.5f;          // –6 dBFS → plenty of headroom
-//   constexpr float kTwoPiOverSR= 2.0f * M_PI / kSampleRate;
-//
-//   static float phase = 0.0f;                   // keeps continuity between calls
-//
-//   const int numFrames = numFramesBy4 * 4;
-//
-//   /* ----------------- choose which stereo pair to write to --------------- */
-//   const int chan  = self->v[kParamOutput] - 1; // 0-based index (UI is 1-based)
-//   float* outL = busFrames + chan * numFrames;
-//   float* outR = outL      + numFrames;
-//
-//   const bool replace = self->v[kParamOutputMode];  // 0 = mix, 1 = replace
-//
-//   /* ---------------------------- generate tone --------------------------- */
-//   for (int n = 0; n < numFrames; ++n)
-//   {
-//     const float sample = kAmp * sinf( phase );
-//     phase += kTwoPiOverSR * kFreq;
-//     if (phase > 2.0f * M_PI)       // wrap to avoid precision loss
-//       phase -= 2.0f * M_PI;
-//
-//     if (replace) {
-//       outL[n] = sample;
-//       outR[n] = sample;
-//     } else {
-//       outL[n] += sample;
-//       outR[n] += sample;
-//     }
-//   }
-// }
+// ────────────────────────────────────────────────────────────────
+//  TEST STEP  –  fixed 440 Hz reference sine
+// ────────────────────────────────────────────────────────────────
+#include <math.h>   // for sinf, M_PI
+
+void sine_step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
+{
+  constexpr float kSampleRate = 48000.0f;      // NT runs at 48 kHz
+  constexpr float kFreq       = 440.0f;        // reference A4
+  constexpr float kAmp        = 0.5f;          // –6 dBFS → plenty of headroom
+  constexpr float kTwoPiOverSR= 2.0f * M_PI / kSampleRate;
+
+  static float phase = 0.0f;                   // keeps continuity between calls
+
+  const int numFrames = numFramesBy4 * 4;
+
+  /* ----------------- choose which stereo pair to write to --------------- */
+  const int chan  = self->v[kParamOutput] - 1; // 0-based index (UI is 1-based)
+  float* outL = busFrames + chan * numFrames;
+  float* outR = outL      + numFrames;
+
+  const bool replace = self->v[kParamOutputMode];  // 0 = mix, 1 = replace
+
+  /* ---------------------------- generate tone --------------------------- */
+  for (int n = 0; n < numFrames; ++n)
+  {
+    const float sample = kAmp * sinf( phase );
+    phase += kTwoPiOverSR * kFreq;
+    if (phase > 2.0f * M_PI)       // wrap to avoid precision loss
+      phase -= 2.0f * M_PI;
+
+    if (replace) {
+      outL[n] = sample;
+      outR[n] = sample;
+    } else {
+      outL[n] += sample;
+      outR[n] += sample;
+    }
+  }
+}
 
 void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
 {
     auto* alg = (_ntEnosc_Alg*)self;
     auto* dtc = alg->dtc;
-
-    /* --------------------------------------------------------------------
-     * 1.  VERIFY DATA INITIALIZATION
-     *     Check a known value in one of the SDRAM tables. If it's zero,
-     *     the DynamicData constructor likely didn't run correctly.
-     *     In that case, output silence.
-     * ------------------------------------------------------------------ */
-    // sine[128] should be close to 1.0 (s1_15 format) after init.
-    if (DynamicData::sine[128].first.abs() < s1_15(0.1_f))
-    {
-        const int numFrames = numFramesBy4 * 4;
-        const int chan      = self->v[kParamOutput] - 1;
-        float* outL = busFrames + chan * numFrames;
-        float* outR = outL      + numFrames;
-        for (int i = 0; i < numFrames; ++i) {
-            outL[i] = outR[i] = 0.0f;
-        }
-        return; // Data not ready, output silence.
-    }
-
 
     const int numFrames = numFramesBy4 * 4;
     const int chan      = self->v[kParamOutput] - 1;        // 1-based in UI
@@ -414,10 +393,10 @@ void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
     float* outR = outL      + numFrames;
     const bool replace = self->v[kParamOutputMode];         // 0 = mix, 1 = replace
 
-    /* these three don't need smoothing but *can* change block-by-block      */
-    dtc->params.alt.numOsc = dtc->next_num_osc.load(std::memory_order_relaxed);
-    dtc->params.root       = f( self->v[kParamRoot]  );
-    dtc->params.pitch      = f( self->v[kParamPitch] );
+    // /* these three don't need smoothing but *can* change block-by-block      */
+    // dtc->params.alt.numOsc = dtc->next_num_osc.load(std::memory_order_relaxed);
+    // dtc->params.root       = f( self->v[kParamRoot]  );
+    // dtc->params.pitch      = f( self->v[kParamPitch] );
 
     /* --------------------------------------------------------------------
      * 2.  Generate audio exactly in 8-sample chunks (kBlockSize) – the same
@@ -450,17 +429,6 @@ void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
     }
 }
 
-void serialise(_NT_algorithm *self, _NT_jsonStream &stream)
-{
-  // All parameters, so no need to serialise
-}
-
-bool deserialise(_NT_algorithm *self, _NT_jsonParse &parse)
-{
-  // All parameters, so no need to deserialise
-  return false;
-}
-
 static const _NT_factory factory = {
     .guid = NT_MULTICHAR('N', 'T', 'E', 'O'),
     .name = "EnsembleOsc",
@@ -478,8 +446,8 @@ static const _NT_factory factory = {
     .hasCustomUi = nullptr,
     .customUi = nullptr,
     .setupUi = nullptr,
-    .serialise = serialise,
-    .deserialise = deserialise,
+    .serialise = nullptr,
+    .deserialise = nullptr,
 };
 
 extern "C" uintptr_t pluginEntry(_NT_selector selector, uint32_t index)
