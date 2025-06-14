@@ -122,10 +122,8 @@ struct _ntEnosc_DTC
   PolypticOscillator<kBlockSize> osc;
   Scale *current_scale;
   std::atomic<int> next_num_osc;
+  Buffer<Frame, kBlockSize> blk;
   _ntEnosc_DTC(_NT_algorithm *self) : osc(params) {
-    for (int i = 0; i < kNumParams; ++i) {
-      parameterChanged(self, i);
-    }
   }
 };
 
@@ -404,18 +402,17 @@ void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
      *     cadence the original STM32 firmware uses.
      * ------------------------------------------------------------------ */
     constexpr int BS = kBlockSize;
-    static Buffer<Frame, BS> blk;                 // persistent scratch
 
     for (int frame = 0; frame < numFrames; frame += BS)
     {
-        dtc->osc.Process( blk );                  // fills blk[0 .. BS-1]
+        dtc->osc.Process( dtc->blk );                  // fills blk[0 .. BS-1]
 
         const int valid = std::min( BS, numFrames - frame );
         for (int i = 0; i < valid; ++i)
         {
             // Convert s9_23 → float; *do not* add any extra scaling.
-            const float l = Float( blk[i].l ).repr();
-            const float r = Float( blk[i].r ).repr();
+            const float l = Float( dtc->blk[i].l ).repr();
+            const float r = Float( dtc->blk[i].r ).repr();
 
             if (replace)
             {
@@ -433,70 +430,13 @@ void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
 
 void serialise(_NT_algorithm *self, _NT_jsonStream &stream)
 {
-  _ntEnosc_Alg *a = (_ntEnosc_Alg *)self;
-  auto &params = a->dtc->params;
-  stream.addMemberName("balance");
-  stream.addNumber(params.balance.repr());
-  stream.addMemberName("root");
-  stream.addNumber(params.root.repr());
-  stream.addMemberName("pitch");
-  stream.addNumber(params.pitch.repr());
-  stream.addMemberName("spread");
-  stream.addNumber(params.spread.repr());
-  stream.addMemberName("detune");
-  stream.addNumber(params.detune.repr());
-  stream.addMemberName("mod_mode");
-  stream.addNumber(static_cast<int>(params.modulation.mode));
-  stream.addMemberName("mod_val");
-  stream.addNumber(params.modulation.value.repr());
-  stream.addMemberName("scale_mode");
-  stream.addNumber(static_cast<int>(params.scale.mode));
-  stream.addMemberName("scale_val");
-  stream.addNumber(params.scale.value);
-  stream.addMemberName("twist_mode");
-  stream.addNumber(static_cast<int>(params.twist.mode));
-  stream.addMemberName("twist_val");
-  stream.addNumber(params.twist.value.repr());
-  stream.addMemberName("warp_mode");
-  stream.addNumber(static_cast<int>(params.warp.mode));
-  stream.addMemberName("warp_val");
-  stream.addNumber(params.warp.value.repr());
-  stream.addMemberName("num_osc");
-  stream.addNumber(params.alt.numOsc);
-  stream.addMemberName("stereo_mode");
-  stream.addNumber(static_cast<int>(params.alt.stereo_mode));
-  stream.addMemberName("freeze_mode");
-  stream.addNumber(static_cast<int>(params.alt.freeze_mode));
+  // All parameters, so no need to serialise
 }
 
 bool deserialise(_NT_algorithm *self, _NT_jsonParse &parse)
 {
-  _ntEnosc_Alg *a = (_ntEnosc_Alg *)self;
-  auto &params = a->dtc->params;
-  int numMembers;
-  if (!parse.numberOfObjectMembers(numMembers)) return false;
-  for (int m = 0; m < numMembers; ++m) {
-    float fv;
-    int iv;
-    if (parse.matchName("balance") && parse.number(fv)) params.balance = f(fv);
-    else if (parse.matchName("root") && parse.number(fv)) params.root = f(fv);
-    else if (parse.matchName("pitch") && parse.number(fv)) params.pitch = f(fv);
-    else if (parse.matchName("spread") && parse.number(fv)) params.spread = f(fv);
-    else if (parse.matchName("detune") && parse.number(fv)) params.detune = f(fv);
-    else if (parse.matchName("mod_mode") && parse.number(iv)) params.modulation.mode = static_cast<ModulationMode>(iv);
-    else if (parse.matchName("mod_val") && parse.number(fv)) params.modulation.value = f(fv);
-    else if (parse.matchName("scale_mode") && parse.number(iv)) params.scale.mode = static_cast<ScaleMode>(iv);
-    else if (parse.matchName("scale_val") && parse.number(iv)) params.scale.value = iv;
-    else if (parse.matchName("twist_mode") && parse.number(iv)) params.twist.mode = static_cast<TwistMode>(iv);
-    else if (parse.matchName("twist_val") && parse.number(fv)) params.twist.value = f(fv);
-    else if (parse.matchName("warp_mode") && parse.number(iv)) params.warp.mode = static_cast<WarpMode>(iv);
-    else if (parse.matchName("warp_val") && parse.number(fv)) params.warp.value = f(fv);
-    else if (parse.matchName("num_osc") && parse.number(iv)) params.alt.numOsc = iv;
-    else if (parse.matchName("stereo_mode") && parse.number(iv)) params.alt.stereo_mode = static_cast<SplitMode>(iv);
-    else if (parse.matchName("freeze_mode") && parse.number(iv)) params.alt.freeze_mode = static_cast<SplitMode>(iv);
-    else if (!parse.skipMember()) return false;
-  }
-  return true;
+  // All parameters, so no need to deserialise
+  return false;
 }
 
 static const _NT_factory factory = {
