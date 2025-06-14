@@ -1,3 +1,4 @@
+#define DYNAMIC_DATA_LOCAL_HH
 #include "enosc_plugin_stubs.h"
 
 #include <atomic>
@@ -6,7 +7,7 @@
 #include <math.h>
 #include <new>
 
-#include "./enosc/data.hh"
+#include "./dynamic_data.hh"
 #include "./enosc/lib/easiglib/bitfield.hh"
 #include "./enosc/lib/easiglib/buffer.hh"
 #include "./enosc/lib/easiglib/dsp.hh"
@@ -118,6 +119,7 @@ void parameterChanged(_NT_algorithm *self, int p);
 // DTC struct holds algorithm state and oscillator instance
 struct _ntEnosc_DTC
 {
+  DynamicData data;
   Parameters params;
   PolypticOscillator<kBlockSize> osc;
   Scale *current_scale;
@@ -385,6 +387,26 @@ void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
 {
     auto* alg = (_ntEnosc_Alg*)self;
     auto* dtc = alg->dtc;
+
+    /* --------------------------------------------------------------------
+     * 1.  VERIFY DATA INITIALIZATION
+     *     Check a known value in one of the SDRAM tables. If it's zero,
+     *     the DynamicData constructor likely didn't run correctly.
+     *     In that case, output silence.
+     * ------------------------------------------------------------------ */
+    // sine[128] should be close to 1.0 (s1_15 format) after init.
+    if (DynamicData::sine[128].first.abs() < s1_15(0.1_f))
+    {
+        const int numFrames = numFramesBy4 * 4;
+        const int chan      = self->v[kParamOutput] - 1;
+        float* outL = busFrames + chan * numFrames;
+        float* outR = outL      + numFrames;
+        for (int i = 0; i < numFrames; ++i) {
+            outL[i] = outR[i] = 0.0f;
+        }
+        return; // Data not ready, output silence.
+    }
+
 
     const int numFrames = numFramesBy4 * 4;
     const int chan      = self->v[kParamOutput] - 1;        // 1-based in UI

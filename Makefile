@@ -15,18 +15,22 @@ INCLUDE_PATH := $(NT_API_PATH)/include
 ###############################################################################
 CXX := arm-none-eabi-c++
 CXXFLAGS := -std=gnu++17 -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard \
-            -mthumb -fno-rtti -fno-exceptions -Os -fno-pic -Wall -Wno-reorder \
+            -mthumb -fno-rtti -fno-exceptions -Os -fno-pic \
+            -Wall -Wno-reorder -Wdouble-promotion \
+            --param l1-cache-size=8 --param l1-cache-line-size=32 \
+            -DARM_MATH_CM7 \
             -MMD -MP -include enosc_plugin_stubs.h
-CXXFLAGS += -I$(INCLUDE_PATH) -I$(BUILD_DIR) -I. \
+CXXFLAGS += -I. -I$(INCLUDE_PATH) -I$(BUILD_DIR) \
             -I$(ENOSC_DIR) -I$(ENOSC_DIR)/src -I$(ENOSC_DIR)/lib/easiglib
 CXXFLAGS += -ffunction-sections -fdata-sections
+#CXXFLAGS += -DNT_TEST_STEP
 
 ###############################################################################
 # Generated Enosc data files
 ###############################################################################
 ENOSC_DATA_CC := $(ENOSC_DIR)/data.cc
 ENOSC_DATA_HH := $(ENOSC_DIR)/data.hh        # generated alongside .cc
-DATA_O        := $(BUILD_DIR)/enosc_data.o
+# DATA_O        := $(BUILD_DIR)/enosc_data.o # No longer building this
 
 ###############################################################################
 # ---- EXPLICIT list of additional source files you actually need ------------
@@ -34,33 +38,30 @@ DATA_O        := $(BUILD_DIR)/enosc_data.o
 
 # Sources that live *inside* $(ENOSC_DIR)
 ENOSC_EXTRA_SRCS := \
-    $(ENOSC_DIR)/lib/easiglib/dsp.cc \
     $(ENOSC_DIR)/lib/easiglib/math.cc \
-    $(ENOSC_DIR)/src/dynamic_data.cc
+    $(ENOSC_DIR)/lib/easiglib/dsp.cc \
+		./dynamic_data.cc
 
 # ---- objects for the files inside enosc/ -----------------------------------
-ENOSC_EXTRA_OBJS := $(patsubst $(ENOSC_DIR)/%, \
-                                $(BUILD_DIR)/$(ENOSC_DIR)/%, \
-                                $(ENOSC_EXTRA_SRCS))
-ENOSC_EXTRA_OBJS := $(ENOSC_EXTRA_OBJS:.cc=.o)
-ENOSC_EXTRA_OBJS := $(ENOSC_EXTRA_OBJS:.cpp=.o)
+ENOSC_OBJ := $(patsubst ./%.cc,$(BUILD_DIR)/%.o,$(filter ./%.cc,$(ENOSC_EXTRA_SRCS)))
+ENOSC_OBJ += $(patsubst $(ENOSC_DIR)/%.cc,$(BUILD_DIR)/enosc/%.o,$(filter $(ENOSC_DIR)/%.cc,$(ENOSC_EXTRA_SRCS)))
 
 ###############################################################################
 # Project-root sources / objects  (e.g. nt_enosc.cpp)
 ###############################################################################
-SRC  := $(filter-out $(ENOSC_DATA_CC),$(wildcard *.cpp))
-OBJ  := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRC))
+SRC  := $(filter-out $(ENOSC_DATA_CC),$(wildcard *.cpp *.cc))
+OBJ  := $(patsubst %.cc,$(BUILD_DIR)/%.o,$(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRC)))
 
 ###############################################################################
 # Final artefact
 ###############################################################################
-INTERMEDIATE_OBJECTS := $(OBJ) $(ENOSC_EXTRA_OBJS) $(DATA_O)
+INTERMEDIATE_OBJECTS := $(OBJ) $(ENOSC_OBJ) # $(DATA_O)
 PLUGIN_O := $(PLUGIN_DIR)/nt_enosc.o
 
 ###############################################################################
 # Default target
 ###############################################################################
-all: $(PLUGIN_O) postproc
+all: $(PLUGIN_O)
 
 ###############################################################################
 # Link: merge everything into one relocatable object
@@ -70,21 +71,6 @@ $(PLUGIN_O): $(INTERMEDIATE_OBJECTS)
 	@mkdir -p $(@D)
 	$(CXX) -r -o $@ $^
 
-###############################################################################
-# Post-process: move every .bss._ZN11DynamicData* section to .dtc.*
-###############################################################################
-postproc: $(PLUGIN_O)
-	@echo "Relocating DynamicData tables from .bss → .dtc"
-	@secs=$$(arm-none-eabi-objdump -h $< | \
-	         awk '/\.bss\._ZN11DynamicData/ {print $$2}'); \
-	cmd="arm-none-eabi-objcopy"; \
-	for s in $$secs; do \
-	    new=.dtc$${s#.bss}; \
-	    cmd="$$cmd --rename-section $$s=$$new,alloc,load,contents"; \
-	done; \
-	cmd="$$cmd $<"; \
-	echo "$$cmd"; \
-	$$cmd
 
 ###############################################################################
 # Pattern rules – project-root .cpp/.cc → build/*.o
@@ -133,7 +119,6 @@ $(ENOSC_DATA_CC) $(ENOSC_DATA_HH): \
 # Convenience targets
 ###############################################################################
 clean:
-	rm -f $(PLUGIN_O) $(INTERMEDIATE_OBJECTS) $(DEPFILES)
 	rm -rf $(BUILD_DIR)
 
 enosc-clean:
@@ -160,5 +145,6 @@ check: all
 ###############################################################################
 # Auto-generated header dependency includes
 ###############################################################################
-DEPFILES := $(INTERMEDIATE_OBJECTS:.o=.d)
+# Only include dependency files ending in .d to avoid erroneously including other files
+DEPFILES := $(filter %.d,$(INTERMEDIATE_OBJECTS:.o=.d))
 -include $(DEPFILES)
