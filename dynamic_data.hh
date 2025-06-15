@@ -12,6 +12,7 @@ static constexpr int fold_size = 1024 + 1;
 
 struct DynamicData {
   DynamicData();
+  void initialise_data();
   static Buffer<std::pair<s1_15, s1_15>, sine_size> sine
       __attribute__((section(".sdram_bss")));
   static Buffer<Buffer<f, cheby_size>, cheby_tables> cheby

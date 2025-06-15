@@ -1,4 +1,4 @@
-#define DYNAMIC_DATA_LOCAL_HH
+// #define DYNAMIC_DATA_LOCAL_HH
 #include "enosc_plugin_stubs.h"
 
 #include <atomic>
@@ -117,14 +117,14 @@ static const _NT_parameter parameters[] = {
 void parameterChanged(_NT_algorithm *self, int p);
 
 // DTC struct holds algorithm state and oscillator instance
-struct _ntEnosc_DTC : public DynamicData
+struct _ntEnosc_DTC
 {
   Parameters params;
   PolypticOscillator<kBlockSize> osc;
   Scale *current_scale;
   std::atomic<int> next_num_osc;
   Buffer<Frame, kBlockSize> blk;
-  _ntEnosc_DTC(_NT_algorithm *self) : DynamicData(), osc(params) {
+  _ntEnosc_DTC(_NT_algorithm *self) : osc(params) {
   }
 };
 
@@ -136,12 +136,14 @@ struct _ntEnosc_Alg : public _NT_algorithm
 
 void calculateStaticRequirements(_NT_staticRequirements &req)
 {
-  req.dram = 0;
+  req.dram = sizeof(DynamicData); // Allocate space for DynamicData in DRAM
 }
 
 void initialise(_NT_staticMemoryPtrs &ptrs, const _NT_staticRequirements &req)
 {
-  // All data is now static, so no initialisation is needed.
+  // Placement new for DynamicData in DRAM
+  DynamicData* dynamic_data_instance = new (ptrs.dram) DynamicData();
+  dynamic_data_instance->initialise_data();
 }
 
 void calculateRequirements(_NT_algorithmRequirements &req, const int32_t *)
@@ -392,11 +394,6 @@ void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
     float* outL = busFrames + chan * numFrames;             // block-per-channel layout
     float* outR = outL      + numFrames;
     const bool replace = self->v[kParamOutputMode];         // 0 = mix, 1 = replace
-
-    // /* these three don't need smoothing but *can* change block-by-block      */
-    // dtc->params.alt.numOsc = dtc->next_num_osc.load(std::memory_order_relaxed);
-    // dtc->params.root       = f( self->v[kParamRoot]  );
-    // dtc->params.pitch      = f( self->v[kParamPitch] );
 
     /* --------------------------------------------------------------------
      * 2.  Generate audio exactly in 8-sample chunks (kBlockSize) – the same

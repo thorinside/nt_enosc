@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+We are making a minimal wrapper for the source code in the enosc/ directory. Please only provide changes to files in the root of this directory, it is the wrapper that must run on Disting NT. It will only run if `make check` succeeds and there are only math or memory functions left undefined.

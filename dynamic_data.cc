@@ -2,7 +2,15 @@
 #pragma GCC optimize("Os")
 
 #include "dynamic_data.hh"
+#include "enosc/lib/easiglib/buffer.hh"
+#include "enosc/lib/easiglib/dsp.hh"
+#include "enosc/lib/easiglib/math.hh"
+#include "enosc/lib/easiglib/numtypes.hh"
+#include "enosc/lib/easiglib/signal.hh"
 
+// Definition for Data::normalization_factors (previously undefined)
+// This is typically from enosc/data.cc, but we need it defined here if
+// enosc/data.cc is not linked
 const Buffer<f, 17> Data::normalization_factors = {{{
     f(1.000000),
     f(1.000000),
@@ -23,8 +31,9 @@ const Buffer<f, 17> Data::normalization_factors = {{{
     f(0.012758),
 }}};
 
-/* triangles */
-Buffer<Buffer<s8_0, 9>, 8> triangles_12ths = {{{
+/* triangles_12ths - this was also previously defined in the old dynamic_data.cc
+ */
+static Buffer<Buffer<s8_0, 9>, 8> triangles_12ths = {{{
     {{{
         -12._s8_0,
         -9._s8_0,
@@ -115,21 +124,28 @@ Buffer<Buffer<s8_0, 9>, 8> triangles_12ths = {{{
     }}},
 }}};
 
-Buffer<std::pair<s1_15, s1_15>, sine_size> DynamicData::sine;
-Buffer<Buffer<f, cheby_size>, cheby_tables> DynamicData::cheby;
-Buffer<std::pair<f, f>, fold_size> DynamicData::fold;
-Buffer<f, (fold_size - 1) / 2 + 1> DynamicData::fold_max;
-Buffer<Buffer<f, 9>, 8> DynamicData::triangles;
+Buffer<std::pair<s1_15, s1_15>, sine_size> DynamicData::sine
+    __attribute__((section(".sdram_bss")));
+Buffer<Buffer<f, cheby_size>, cheby_tables> DynamicData::cheby
+    __attribute__((section(".sdram_bss")));
+Buffer<std::pair<f, f>, fold_size> DynamicData::fold
+    __attribute__((section(".sdram_bss")));
+Buffer<f, (fold_size - 1) / 2 + 1> DynamicData::fold_max
+    __attribute__((section(".sdram_bss")));
+Buffer<Buffer<f, 9>, 8> DynamicData::triangles
+    __attribute__((section(".sdram_bss")));
 
 DynamicData::DynamicData() {
-  /*
-  using namespace easiglib::numtypes;
+  // Constructor is empty as per user's request; initialization handled by
+  // initialise_data()
+}
+
+void DynamicData::initialise_data() {
   // sine + difference
   {
     MagicSine magic(1_f / f(sine_size - 1));
     s1_15 previous = s1_15::inclusive(magic.Process());
-    for (auto &[v, d] : sine)
-    {
+    for (auto &[v, d] : sine) {
       v = previous;
       previous = s1_15::inclusive(magic.Process());
       d = previous - v;
@@ -153,8 +169,7 @@ DynamicData::DynamicData() {
   {
     f folds = 6_f;
     f previous = 0_f;
-    for (int i = 0; i < fold_size; ++i)
-    {
+    for (int i = 0; i < fold_size; ++i) {
       // TODO: this -3 make the wavefolding curve symmetrical; why?
       f x = f(i) / f(fold_size - 3); // 0..1
       x = folds * (2_f * x - 1_f);   // -folds..folds
@@ -174,41 +189,24 @@ DynamicData::DynamicData() {
   {
     f max = 0_f;
     int start = (fold_size - 1) / 2;
-    for (int i = 0; i < fold_max.size(); ++i)
-    {
+    for (int i = 0; i < fold_max.size(); ++i) {
       max = fold[i + start].first.abs().max(max);
       // the attenuation factor accounts for interpolation error, so
       // we don't overestimate the 1/x curve and amplify to clipping
-      fold_max[i] = (max * 1.05_f).reciprocal();
+      fold_max[i] = 0.92_f / (max + 0.00001_f);
     }
   }
 
   // triangles
   {
     // This is a direct copy of the pre-calculated triangle tables from the
-  original source. static const s8_0 triangles_12ths[8][9] = {
-        {{-12_s8_0, -9_s8_0, -6_s8_0, -3_s8_0, 0_s8_0, 3_s8_0, 6_s8_0, 9_s8_0,
-  12_s8_0}},
-        {{-12_s8_0, -12_s8_0, -8_s8_0, -4_s8_0, 0_s8_0, 4_s8_0, 8_s8_0, 12_s8_0,
-  12_s8_0}},
-        {{-12_s8_0, -12_s8_0, -12_s8_0, -6_s8_0, 0_s8_0, 6_s8_0, 12_s8_0,
-  12_s8_0, 12_s8_0}},
-        {{-12_s8_0, -12_s8_0, -12_s8_0, -12_s8_0, 0_s8_0, 12_s8_0, 12_s8_0,
-  12_s8_0, 12_s8_0}},
-        {{-12_s8_0, -6_s8_0, -12_s8_0, -6_s8_0, 0_s8_0, 6_s8_0, 12_s8_0, 6_s8_0,
-  12_s8_0}},
-        {{-12_s8_0, -6_s8_0, 0_s8_0, -12_s8_0, 0_s8_0, 12_s8_0, 0_s8_0, 6_s8_0,
-  12_s8_0}},
-        {{-12_s8_0, -6_s8_0, 12_s8_0, -12_s8_0, 0_s8_0, 12_s8_0, -12_s8_0,
-  6_s8_0, 12_s8_0}},
-        {{12_s8_0, -12_s8_0, 12_s8_0, -12_s8_0, 0_s8_0, 12_s8_0, -12_s8_0,
-  12_s8_0, -12_s8_0}},
-    };
-    for (int i = 0; i < 8; i++)
-      for (int j = 0; j < 9; j++)
-        triangles[i][j] = (f)(triangles_12ths[i][j]) / 12.0_f;
+    // original source.
+    for (int i = 0; i < 8; ++i) {
+      for (int j = 0; j < 9; ++j) {
+        triangles[i][j] = f(triangles_12ths[i][j]) / 12.0_f;
+      }
+    }
   }
-  */
 }
 
 #pragma GCC pop_options

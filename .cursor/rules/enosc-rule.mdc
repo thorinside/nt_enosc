@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+The files in the enosc/ directory and the distintNT_API/ directory are not to be edited. data.hh and data.cc can be removed if needed.

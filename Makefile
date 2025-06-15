@@ -39,8 +39,7 @@ ENOSC_DATA_HH := $(ENOSC_DIR)/data.hh        # generated alongside .cc
 # Sources that live *inside* $(ENOSC_DIR)
 ENOSC_EXTRA_SRCS := \
     $(ENOSC_DIR)/lib/easiglib/math.cc \
-    $(ENOSC_DIR)/lib/easiglib/dsp.cc \
-		./dynamic_data.cc
+    $(ENOSC_DIR)/lib/easiglib/dsp.cc
 
 # ---- objects for the files inside enosc/ -----------------------------------
 ENOSC_OBJ := $(patsubst ./%.cc,$(BUILD_DIR)/%.o,$(filter ./%.cc,$(ENOSC_EXTRA_SRCS)))
