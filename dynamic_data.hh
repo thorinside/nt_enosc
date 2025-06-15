@@ -23,6 +23,8 @@ struct DynamicData {
       __attribute__((section(".sdram_bss")));
   static Buffer<Buffer<f, 9>, 8> triangles
       __attribute__((section(".sdram_bss")));
+  static Buffer<Buffer<s8_0, 9>, 8> triangles_12ths
+      __attribute__((section(".sdram_bss")));
 };
 
 #endif // DYNAMIC_DATA_LOCAL_HH

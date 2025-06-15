@@ -26,20 +26,14 @@ CXXFLAGS += -ffunction-sections -fdata-sections
 #CXXFLAGS += -DNT_TEST_STEP
 
 ###############################################################################
-# Generated Enosc data files
-###############################################################################
-ENOSC_DATA_CC := $(ENOSC_DIR)/data.cc
-ENOSC_DATA_HH := $(ENOSC_DIR)/data.hh        # generated alongside .cc
-# DATA_O        := $(BUILD_DIR)/enosc_data.o # No longer building this
-
-###############################################################################
 # ---- EXPLICIT list of additional source files you actually need ------------
 ###############################################################################
 
 # Sources that live *inside* $(ENOSC_DIR)
 ENOSC_EXTRA_SRCS := \
     $(ENOSC_DIR)/lib/easiglib/math.cc \
-    $(ENOSC_DIR)/lib/easiglib/dsp.cc
+    $(ENOSC_DIR)/lib/easiglib/dsp.cc \
+		$(ENOSC_DIR)/data.cc
 
 # ---- objects for the files inside enosc/ -----------------------------------
 ENOSC_OBJ := $(patsubst ./%.cc,$(BUILD_DIR)/%.o,$(filter ./%.cc,$(ENOSC_EXTRA_SRCS)))
@@ -109,10 +103,10 @@ $(DATA_O): $(ENOSC_DATA_CC) $(ENOSC_DATA_HH)
 ###############################################################################
 # Rule to **generate** enosc/data.{cc,hh}
 ###############################################################################
-$(ENOSC_DATA_CC) $(ENOSC_DATA_HH): \
-        $(ENOSC_DIR)/data/data.py $(ENOSC_DIR)/lib/easiglib/data_compiler.py
-	@echo "--- Generating Enosc data files ---"
-	(cd $(ENOSC_DIR) && PYTHONPATH=lib/easiglib python3 data/data.py)
+#$(ENOSC_DATA_CC) $(ENOSC_DATA_HH): \
+#        $(ENOSC_DIR)/data/data.py $(ENOSC_DIR)/lib/easiglib/data_compiler.py
+#	@echo "--- Generating Enosc data files ---"
+#	(cd $(ENOSC_DIR) && PYTHONPATH=lib/easiglib python3 data/data.py)
 
 ###############################################################################
 # Convenience targets

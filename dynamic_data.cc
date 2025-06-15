@@ -8,32 +8,9 @@
 #include "enosc/lib/easiglib/numtypes.hh"
 #include "enosc/lib/easiglib/signal.hh"
 
-// Definition for Data::normalization_factors (previously undefined)
-// This is typically from enosc/data.cc, but we need it defined here if
-// enosc/data.cc is not linked
-const Buffer<f, 17> Data::normalization_factors = {{{
-    f(1.000000),
-    f(1.000000),
-    f(1.000000),
-    f(1.000000),
-    f(0.816824),
-    f(0.577721),
-    f(0.408248),
-    f(0.288675),
-    f(0.204124),
-    f(0.144338),
-    f(0.102062),
-    f(0.072169),
-    f(0.051031),
-    f(0.036084),
-    f(0.025515),
-    f(0.018042),
-    f(0.012758),
-}}};
-
 /* triangles_12ths - this was also previously defined in the old dynamic_data.cc
  */
-static Buffer<Buffer<s8_0, 9>, 8> triangles_12ths = {{{
+Buffer<Buffer<s8_0, 9>, 8> DynamicData::triangles_12ths = {{{
     {{{
         -12._s8_0,
         -9._s8_0,
