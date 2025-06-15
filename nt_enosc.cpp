@@ -2,6 +2,7 @@
 #include "enosc_plugin_stubs.h"
 
 #include <atomic>
+#include <cstring> // For std::memset
 #include <distingnt/api.h>
 #include <distingnt/serialisation.h>
 #include <math.h>
@@ -26,8 +27,10 @@ enum {
   kParamPitchCV,
   kParamRootCV,
 
-  kParamOutput,
-  kParamOutputMode,
+  kParamOutputA,
+  kParamOutputAMode,
+  kParamOutputB,
+  kParamOutputBMode,
 
   kParamBalance,
   kParamRoot,
@@ -80,7 +83,8 @@ const int kNumBusses = 28;
 static const _NT_parameter parameters[] = {
     NT_PARAMETER_CV_INPUT("Pitch CV Input", 0, 1)
     NT_PARAMETER_CV_INPUT("Root CV Input", 0, 2)
-    NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output", 1, 13)
+    NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output A", 1, 13)
+    NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output B", 1, 14)
     {.name = "Balance", .min = -100, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
     {.name = "Root", .min = -24, .max = 24, .def = 0, .unit = kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
     {.name = "Pitch", .min = 0, .max = 127, .def = 69, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
@@ -135,16 +139,16 @@ struct _ntEnosc_Alg : public _NT_algorithm
   _ntEnosc_DTC *dtc;
 };
 
+// Define the global pointer here now that it will point to DRAM
+DynamicData *g_DynamicData;
+
 void calculateStaticRequirements(_NT_staticRequirements &req)
 {
-  req.dram = sizeof(DynamicData); // Allocate space for DynamicData in DRAM
+  req.dram = 0;
 }
 
 void initialise(_NT_staticMemoryPtrs &ptrs, const _NT_staticRequirements &req)
 {
-  // Placement new for DynamicData in DRAM
-  DynamicData* dynamic_data_instance = new (ptrs.dram) DynamicData();
-  dynamic_data_instance->initialise_data();
 }
 
 void calculateRequirements(_NT_algorithmRequirements &req, const int32_t *)
@@ -344,215 +348,51 @@ case kParamTwistMode:
   }
 }
 
-// --------------------------------------------------------------------
-//  TEST STEP  –  fixed 440 Hz reference sine
-// --------------------------------------------------------------------
-
-// Helper for float comparison
-static bool are_equal(f a, f b) { return (a - b).abs() < 1e-6_f; }
-
-// Verification functions
-static bool verify_sine_table() {
-  MagicSine magic(1_f / f(sine_size - 1));
-  s1_15 previous = s1_15::inclusive(magic.Process());
-  for (const auto &[v, d] : DynamicData::sine) {
-    if (v != previous)
-      return false;
-    s1_15 current_val = previous;
-    previous = s1_15::inclusive(magic.Process());
-    if (d != previous - current_val)
-      return false;
-  }
-  return true;
-}
-
-static bool verify_cheby_table() {
-  Buffer<Buffer<f, cheby_size>, cheby_tables> temp_cheby;
-
-  for (int i = 0; i < cheby_size; i++)
-    temp_cheby[0][i] = f(i * 2) / f(cheby_size - 1) - 1_f;
-
-  for (int i = 0; i < cheby_size; i++)
-    temp_cheby[1][i] = 2_f * temp_cheby[0][i] * temp_cheby[0][i] - 1_f;
-
-  for (int n = 2; n < cheby_tables; n++)
-    for (int i = 0; i < cheby_size; i++)
-      temp_cheby[n][i] =
-          2_f * temp_cheby[0][i] * temp_cheby[n - 1][i] - temp_cheby[n - 2][i];
-
-  for (int n = 0; n < cheby_tables; ++n) {
-    for (int i = 0; i < cheby_size; ++i) {
-      if (!are_equal(DynamicData::cheby[n][i], temp_cheby[n][i]))
-        return false;
-    }
-  }
-  return true;
-}
-
-static bool verify_fold_table() {
-  f folds = 6_f;
-  f previous = 0_f;
-  for (int i = 0; i < fold_size; ++i) {
-    f x = f(i) / f(fold_size - 3);
-    x = folds * (2_f * x - 1_f);
-    f g = 1_f / (1_f + x.abs());
-    f p = 16_f / (2_f * Math::pi) * x * g;
-    while (p > 1_f)
-      p--;
-    while (p < 0_f)
-      p++;
-    x = -g * (x + Math::fast_sine(p));
-    auto val = i == 0 ? std::pair(x, 0_f) : std::pair(previous, x - previous);
-    if (!are_equal(DynamicData::fold[i].first, val.first) ||
-        !are_equal(DynamicData::fold[i].second, val.second))
-      return false;
-    previous = x;
-  }
-  return true;
-}
-
-static bool verify_fold_max_table() {
-  f max = 0_f;
-  int start = (fold_size - 1) / 2;
-  for (int i = 0; i < DynamicData::fold_max.size(); ++i) {
-    max = DynamicData::fold[i + start].first.abs().max(max);
-    f val = 1.0_f / (max * 1.05_f);
-    if (!are_equal(DynamicData::fold_max[i], val))
-      return false;
-  }
-  return true;
-}
-
-static bool verify_triangles_table() {
-  // extern Buffer<Buffer<s8_0, 9>, 8> DynamicData::triangles_12ths;
-  // for (int i = 0; i < 8; i++)
-  //   for (int j = 0; j < 9; j++)
-  //     if (!are_equal(DynamicData::triangles[i][j],
-  //                    (f)(triangles_12ths[i][j]) / 12.0_f))
-  //       return false;
-  return true;
-}
-
-static int verifyTables() {
-  if (!verify_sine_table())
-    return 1;
-  if (!verify_cheby_table())
-    return 2;
-  if (!verify_fold_table())
-    return 3;
-  if (!verify_fold_max_table())
-    return 4;
-  if (!verify_triangles_table())
-    return 5;
-  return 0; // All good
-}
-
-// ────────────────────────────────────────────────────────────────
-//  TEST STEP  –  fixed 440 Hz reference sine
-// ────────────────────────────────────────────────────────────────
-#include <math.h>   // for sinf, M_PI
-
-void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 );
-
-void sine_step(_NT_algorithm *self, float *busFrames, int numFramesBy4)
-{
-    static bool tables_initialised = false;
-    static int verification_result = -1;
-
-    if (!tables_initialised) {
-//        DynamicData::initialiseTables();
-        verification_result = verifyTables();
-        tables_initialised = true;
-    }
-    
-    // If verification failed, output a sine wave indicating the error code
-    if (verification_result != 0) {
-        static float phase = 0.0f;
-        static int beep_count = 0;
-        static int current_beep_samples = 0;
-        static int pause_samples = 0;
-
-        float phase_inc = 440.0f * 2.0f * M_PI / kSampleRate;
-
-        for (int i = 0; i < numFramesBy4 * 4; ++i) {
-            float out = 0.0f;
-            if (beep_count < verification_result) {
-                if (current_beep_samples > 0) {
-                    out = sinf(phase) * 0.5f;
-                    phase += phase_inc;
-                    if (phase > 2.0f * M_PI)
-                        phase -= 2.0f * M_PI;
-                    current_beep_samples--;
-                } else if (pause_samples > 0) {
-                    pause_samples--;
-                } else {
-                    beep_count++;
-                    if (beep_count < verification_result) {
-                        current_beep_samples = kSampleRate * 0.1; // next beep
-                        pause_samples = kSampleRate * 0.4;
-                    } else {
-                        // long pause after sequence
-                        current_beep_samples = 0;
-                        pause_samples = kSampleRate * 2.0;
-                        beep_count = 0; // reset for next sequence
-                    }
-                }
-            } else {
-                 if (pause_samples > 0) {
-                    pause_samples--;
-                } else {
-                    beep_count = 0;
-                    current_beep_samples = kSampleRate * 0.1;
-                    pause_samples = kSampleRate * 0.1;
-                }
-            }
-            busFrames[i * kNumBusses + 13] = out;
-            busFrames[i * kNumBusses + 14] = out;
-        }
-        return;
-    }
-
-  // normal processing
-  step(self, busFrames, numFramesBy4);
-}
-
-void step( _NT_algorithm* self, float* busFrames, int numFramesBy4 )
+void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
 {
     auto* alg = (_ntEnosc_Alg*)self;
     auto* dtc = alg->dtc;
 
     const int numFrames = numFramesBy4 * 4;
-    const int chan      = self->v[kParamOutput] - 1;        // 1-based in UI
-    float* outL = busFrames + chan * numFrames;             // block-per-channel layout
-    float* outR = outL      + numFrames;
-    const bool replace = self->v[kParamOutputMode];         // 0 = mix, 1 = replace
 
-    /* --------------------------------------------------------------------
-     * 2.  Generate audio exactly in 8-sample chunks (kBlockSize) – the same
-     *     cadence the original STM32 firmware uses.
-     * ------------------------------------------------------------------ */
-    constexpr int BS = kBlockSize;
+    // UI is 1-based, clamp to [0 .. MAX_CHAN]
+    int chanA = int(self->v[kParamOutputA]) - 1;
+    int chanB = int(self->v[kParamOutputB]) - 1;
+    constexpr int MAX_CHAN = 27;  // for a 28-channel bus
+    chanA = std::clamp(chanA, 0, MAX_CHAN);
+    chanB = std::clamp(chanB, 0, MAX_CHAN);
+
+    // pointers into each channel’s block
+    float* outA = busFrames + chanA * numFrames;
+    float* outB = busFrames + chanB * numFrames;
+
+    // 0 = mix, nonzero = replace
+    bool replaceA = (self->v[kParamOutputAMode] != 0);
+    bool replaceB = (self->v[kParamOutputBMode] != 0);
+
+    constexpr int BS = kBlockSize;  // 8 samples
 
     for (int frame = 0; frame < numFrames; frame += BS)
     {
-        dtc->osc.Process( dtc->blk );                  // fills blk[0 .. BS-1]
+        // produce BS stereo samples in dtc->blk
+        dtc->osc.Process(dtc->blk);
 
-        const int valid = std::min( BS, numFrames - frame );
+        int valid = std::min(BS, numFrames - frame);
         for (int i = 0; i < valid; ++i)
         {
-            // Convert s9_23 → float; *do not* add any extra scaling.
-            const float l = Float( dtc->blk[i].l ).repr();
-            const float r = Float( dtc->blk[i].r ).repr();
+            // convert fixed-point to float
+            float sampleL = Float(dtc->blk[i].l).repr();
+            float sampleR = Float(dtc->blk[i].r).repr();
 
-            if (replace)
-            {
-                outL[frame + i] = l;
-                outR[frame + i] = r;
+            if (replaceA) {
+                outA[frame + i] = sampleL;
+            } else {
+                outA[frame + i] += sampleL;
             }
-            else
-            {
-                outL[frame + i] += l;
-                outR[frame + i] += r;
+            if (replaceB) {
+                outB[frame + i] = sampleR;
+            } else {
+                outB[frame + i] += sampleR;
             }
         }
     }
@@ -567,7 +407,7 @@ static const _NT_factory factory = {
     .calculateRequirements = calculateRequirements,
     .construct = construct,
     .parameterChanged = parameterChanged,
-    .step = sine_step,
+    .step = step,
     .draw = nullptr,
     .midiRealtime = nullptr,
     .midiMessage = nullptr,

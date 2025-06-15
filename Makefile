@@ -33,7 +33,8 @@ CXXFLAGS += -ffunction-sections -fdata-sections
 ENOSC_EXTRA_SRCS := \
     $(ENOSC_DIR)/lib/easiglib/math.cc \
     $(ENOSC_DIR)/lib/easiglib/dsp.cc \
-		$(ENOSC_DIR)/data.cc
+		$(ENOSC_DIR)/data.cc \
+		dynamic_data.cc
 
 # ---- objects for the files inside enosc/ -----------------------------------
 ENOSC_OBJ := $(patsubst ./%.cc,$(BUILD_DIR)/%.o,$(filter ./%.cc,$(ENOSC_EXTRA_SRCS)))
