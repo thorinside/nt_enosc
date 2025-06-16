@@ -87,10 +87,10 @@ static const _NT_parameter parameters[] = {
     NT_PARAMETER_CV_INPUT("Root CV Input", 0, 2)
     NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output A", 1, 13)
     NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output B", 1, 14)
-    {.name = "Balance", .min = -100, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Balance", .min = -100, .max = 100, .def = 100, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
     {.name = "Root Note", .min = 0, .max = 21, .def = 12, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
-    {.name = "Pitch", .min = 0, .max = 127, .def = 69, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
-    {.name = "Spread", .min = 0,  .max = 12, .def = 0, .unit = kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
+    {.name = "Pitch", .min = 0, .max = 127, .def = 0, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
+    {.name = "Spread", .min = 0,  .max = 12, .def = 4, .unit = kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
     {.name = "Detune", .min = -100,  .max = 100, .def = 0, .unit = kNT_unitSemitones,   .scaling = kNT_scaling100, .enumStrings = NULL},
 
     {.name = "Mod mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumMod},
