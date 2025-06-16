@@ -32,10 +32,10 @@ def gen_sine():
    
     for _ in range(sine_size):
         # quantize previous sample
-        qv = int(round(prev * scale))
+        qv = int(prev * scale)
         # next raw sample
         curr = osc.process()
-        qc = int(round(curr * scale))
+        qc = int(curr * scale)
         # store value and delta as floats converted back
         out.append((qv / scale, (qc - qv) / scale))
         prev = curr
