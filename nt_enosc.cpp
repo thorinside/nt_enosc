@@ -62,6 +62,7 @@ enum {
   kParamAddNote,
   kParamRemoveLastNote,
   kParamResetScale,
+  kParamManualLearn,
 
   kNumParams
 };
@@ -85,7 +86,7 @@ static const _NT_parameter parameters[] = {
     NT_PARAMETER_CV_INPUT("Root CV Input", 0, 2)
     NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output A", 1, 13)
     NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output B", 1, 14)
-    {.name = "Balance", .min = -100, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Balance", .min = -100, .max = 100, .def = 50, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
     {.name = "Root", .min = -24, .max = 24, .def = 0, .unit = kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
     {.name = "Pitch", .min = 0, .max = 127, .def = 69, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
     {.name = "Spread", .min = 0,  .max = 100, .def = 0, .unit = kNT_unitPercent,   .scaling = 0, .enumStrings = NULL},
@@ -115,6 +116,7 @@ static const _NT_parameter parameters[] = {
     {.name = "Add Note", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
     {.name = "Remove Last Note", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
     {.name = "Reset Scale", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
+    {.name = "Manual Learn", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumLearn},
 };
 // clang-format off
 
@@ -129,7 +131,16 @@ struct _ntEnosc_DTC
   Scale *current_scale;
   std::atomic<int> next_num_osc;
   Buffer<Frame, kBlockSize> blk;
+  float pitch_pot_base = 69.f; // Default MIDI note
+  float root_pot_base = 0.f;   // Default semitone offset
+
+  float prev_kParamLearn_val = 0.f;
+  float dtc_manual_learn_offset = 0.f; // New member to store the offset
+
   _ntEnosc_DTC(_NT_algorithm *self) : osc(params) {
+    // Initialize 'alt' parameters to their true defaults, as Parameters::clear() uses memset
+    params.alt.numOsc = 16; // Corrected: Default from Parameters::Alt is 16
+    params.alt.crossfade_factor = 0.5_f; // Default from Parameters::Alt
   }
 };
 
@@ -168,6 +179,7 @@ _NT_algorithm *construct(const _NT_algorithmMemoryPtrs &ptrs,
   alg->parameterPages = nullptr;
   auto *d = new (ptrs.dtc) _ntEnosc_DTC(alg);
   alg->dtc = d;
+
   return alg;
 }
 
@@ -176,20 +188,45 @@ void parameterChanged(_NT_algorithm *self, int p)
   _ntEnosc_Alg *a = (_ntEnosc_Alg *)self;
   auto &params = a->dtc->params;
   float v = self->v[p];
-  switch (p)
-  {
+  float prev_learn_val = a->dtc->prev_kParamLearn_val;
+
+  // All parameters are directly handled, no UI modes needed
+  switch (p) {
+  case kParamLearn: {
+    if (v == 1.f && prev_learn_val == 0.f) { // Learn parameter turned on
+      a->dtc->osc.enable_learn();
+      a->dtc->osc.enable_pre_listen();
+      a->dtc->dtc_manual_learn_offset = a->dtc->osc.lowest_pitch().repr() - params.root.repr();
+    } else if (v == 0.f && prev_learn_val == 1.f) { // Learn parameter turned off
+      a->dtc->osc.disable_learn();
+    }
+    a->dtc->prev_kParamLearn_val = v;
+    break;
+  }
+  case kParamManualLearn: {
+    if (bool(v)) { // Manual Learn turned on
+      a->dtc->osc.enable_pre_listen();
+      a->dtc->osc.enable_follow_new_note();
+    } else { // Manual Learn turned off
+      a->dtc->osc.disable_follow_new_note();
+    }
+    break;
+  }
+  case kParamFreeze: {
+    a->dtc->osc.set_freeze(bool(v));
+    break;
+  }
   case kParamBalance: {
-    f bb = f(v / 100.f) * 2_f - 1_f;      // -1..1
-    bb *= bb * bb;                        // -1..1 cubic
-    bb *= 4_f;                            // -4..4
-    params.balance = Math::fast_exp2(bb); // 0.0625..16
+    params.balance = f(v / 100.f) * 2_f - 1_f;
     break;
   }
   case kParamRoot:
     params.root = f(v);
+    a->dtc->root_pot_base = v;
     break;
   case kParamPitch:
     params.pitch = f(v);
+    a->dtc->pitch_pot_base = v;
     break;
   case kParamSpread: {
     f sp = f(v / 100.f);
@@ -207,33 +244,20 @@ void parameterChanged(_NT_algorithm *self, int p)
   case kParamModMode:
     params.modulation.mode = ModulationMode(int(v));
     break;
-    
   case kParamModValue: {
     f m = f(v / 100.f); // 0 … 1 from the panel
-
-    /* 1. Let 0 % really be silence but give low end more resolution          *
-     *    (square curve – same trick we used for Twist/Warp).                 */
-    m *= m;
-
-    /* 2. Normalise for polyphony so the same 50 % sounds similar whether     *
-     *    you run 1 or 16 oscillators.                                        */
-    m *= 4_f / f(params.alt.numOsc);   // 4 instead of 6 → gentler overall
-
-    /* 3. Mode-specific trims. These are now *relative* multipliers,          *
-     *    not 6 × 0.9 × 4 swings.                                             */
+    m *= m; // square curve
+    m *= 4_f / f(params.alt.numOsc);   // Normalise for polyphony
     switch (params.modulation.mode) {
-      case ONE:    m *= 2.5_f; break;   // bright metallic, like the original
-      case TWO:    m *= 1.0_f; break;   // classic "DX" cross-mod
-      case THREE:  m *= 1.8_f; break;   // richer but still controlled
+      case ONE:    m *= 2.5_f; break;
+      case TWO:    m *= 1.0_f; break;
+      case THREE:  m *= 1.8_f; break;
     }
-
-    /* 4. Safety – the engine stays well-behaved < 5. */
-    if (m > 4.999_f) m = 4.999_f;
-
+    if (m > 4.999_f) m = 4.999_f; // Safety
     params.modulation.value = m;
     break;
-
-}  case kParamScaleMode: {
+  }
+  case kParamScaleMode: {
     params.scale.mode = ScaleMode(int(v));
     break;
   }
@@ -241,86 +265,59 @@ void parameterChanged(_NT_algorithm *self, int p)
     params.scale.value = int(v + 0.5f);
     break;
   }
-case kParamTwistMode:
+  case kParamTwistMode:
     params.twist.mode = TwistMode(int(v));
     break;
-
   case kParamTwistValue:
   {
-    /* 0 … 100 % from the UI → 0 … 1.0 internal */
     f tw = f(v / 100.f);
-
-    /* No forced floor: let 0 % really be 0 for a clean sine. */
-    if (params.twist.mode == FEEDBACK)
-    {
-      /* gentle quadratic curve, same as before but floor removed */
+    if (params.twist.mode == FEEDBACK) {
       tw *= tw * 0.7_f;
-    }
-    else if (params.twist.mode == PULSAR)
-    {
-      /* 0 … 1  →  1 … 64  (exp2(6 · x)) */
+    } else if (params.twist.mode == PULSAR) {
       tw = Math::fast_exp2(tw * 6_f);
-      if (tw < 1_f)    /* guarantee spec range 1…64 */
-        tw = 1_f;
-    }
-    else /* CRUSH */
-    {
+      if (tw < 1_f) tw = 1_f;
+    } else /* CRUSH */ {
       tw = tw * tw * 0.5_f;
     }
     params.twist.value = tw;
     break;
   }
-
-  /* ──────────────────────────────────── WARP ──────────────────────────────────────────────────── */
   case kParamWarpMode:
     params.warp.mode = WarpMode(int(v));
     break;
-
   case kParamWarpValue:
   {
-    /* 0 … 100 % → 0 … 1.0 */
     f wr = f(v / 100.f);
-
-    if (params.warp.mode == FOLD)
-    {
-      /* keep the old curve, but now it really starts at 0 % = 0  */
-      wr = wr * wr;            // square for finer low-end control
+    if (params.warp.mode == FOLD) {
+      wr = wr * wr;
       wr = wr * 0.9_f + 0.004_f;
-      if (wr > 0.999_f)        // absolute safety limit
-        wr = 0.999_f;
-    }
-    else  /* CHEBY or SEGMENT */
-    {
-      /* Clamp strictly below 1.0 to stay inside the lookup-table bounds */
-      if (wr >= 0.999_f)
-        wr = 0.999_f;
+      if (wr > 0.999_f) wr = 0.999_f;
+    } else /* CHEBY or SEGMENT */ {
+      if (wr >= 0.999_f) wr = 0.999_f;
     }
     params.warp.value = wr;
     break;
   }
-  case kParamNumOsc:
-    params.alt.numOsc = static_cast<int>(v);
+  case kParamNumOsc: {
+    int numOsc = roundf((v / 100.f) * (16 - 1) + 1);
+    params.alt.numOsc = std::clamp(numOsc, 1, 16);
     break;
-  case kParamStereoMode:
-    params.alt.stereo_mode = SplitMode(int(v));
+  }
+  case kParamStereoMode: {
+    int stereo_mode = roundf((v / 100.f) * 2);
+    params.alt.stereo_mode = static_cast<SplitMode>(std::clamp(stereo_mode, 0, 2));
     break;
-  case kParamFreezeMode:
-    params.alt.freeze_mode = SplitMode(int(v));
+  }
+  case kParamFreezeMode: {
+    int freeze_mode = roundf((v / 100.f) * 2);
+    params.alt.freeze_mode = static_cast<SplitMode>(std::clamp(freeze_mode, 0, 2));
     break;
-  case kParamFreeze:
-    a->dtc->osc.set_freeze(bool(v));
+  }
+  case kParamCrossfade: {
+    f crossfade_factor = f(v / 100.f) * 0.5_f; // Maps 0-100% to 0-0.5
+    params.alt.crossfade_factor = crossfade_factor;
     break;
-  case kParamLearn:
-    if (bool(v)) {
-      a->dtc->osc.enable_learn();
-      a->dtc->osc.enable_pre_listen();
-    } else {
-      a->dtc->osc.disable_learn();
-    }
-    break;
-  case kParamCrossfade:
-    params.alt.crossfade_factor = f(v / 100.f);
-    break;
+  }
   case kParamNewNote:
     params.new_note = f(v);
     break;
@@ -329,8 +326,7 @@ case kParamTwistMode:
     break;
   case kParamAddNote:
     if (bool(v)) {
-      a->dtc->osc.new_note(params.new_note + params.fine_tune);
-      a->dtc->osc.enable_follow_new_note();
+      a->dtc->osc.new_note(params.new_note + f(a->dtc->dtc_manual_learn_offset) + params.fine_tune);
     }
     break;
   case kParamRemoveLastNote:
@@ -362,7 +358,15 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
     chanA = std::clamp(chanA, 0, MAX_CHAN);
     chanB = std::clamp(chanB, 0, MAX_CHAN);
 
-    // pointers into each channel’s block
+    // Get bus indices for CV inputs
+    int pitch_cv_bus_idx = int(self->v[kParamPitchCV]) - 1; // 1-based to 0-based
+    int root_cv_bus_idx = int(self->v[kParamRootCV]) - 1;   // 1-based to 0-based
+
+    // Clamp bus indices to valid range
+    pitch_cv_bus_idx = std::clamp(pitch_cv_bus_idx, 0, MAX_CHAN);
+    root_cv_bus_idx = std::clamp(root_cv_bus_idx, 0, MAX_CHAN);
+
+    // pointers into each channel's block
     float* outA = busFrames + chanA * numFrames;
     float* outB = busFrames + chanB * numFrames;
 
@@ -374,6 +378,16 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
 
     for (int frame = 0; frame < numFrames; frame += BS)
     {
+        // Read CV input values for the current block from the first sample of the block
+        // Assuming CV inputs are 0.0 to 1.0, map to +/- 5V range (10 octaves = 120 semitones)
+        // This is a common Eurorack CV scaling.
+        f current_pitch_cv_value = f((busFrames[pitch_cv_bus_idx * numFrames + frame] - 0.5f) * 120.0f);
+        f current_root_cv_value = f((busFrames[root_cv_bus_idx * numFrames + frame] - 0.5f) * 120.0f);
+
+        // Apply CV to parameters, adding to the base pot values
+        dtc->params.pitch = f(dtc->pitch_pot_base) + current_pitch_cv_value;
+        dtc->params.root = f(dtc->root_pot_base) + current_root_cv_value;
+
         // produce BS stereo samples in dtc->blk
         dtc->osc.Process(dtc->blk);
 
