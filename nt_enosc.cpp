@@ -391,8 +391,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
         for (int i = 0; i < valid; ++i)
         {
             // convert fixed-point to float
-            float sampleL = Float(dtc->blk[i].l).repr();
-            float sampleR = Float(dtc->blk[i].r).repr();
+            float sampleL = Float(dtc->blk[i].l).repr() * 5.0f;
+            float sampleR = Float(dtc->blk[i].r).repr() * 5.0f;
 
             if (replaceA) {
                 outA[frame + i] = sampleL;

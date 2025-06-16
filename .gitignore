@@ -27,4 +27,4 @@ node_modules/
 tasks.json
 tasks/
 
-dynamic_data.cc
+/dynamic_data.*
