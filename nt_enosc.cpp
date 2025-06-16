@@ -87,11 +87,11 @@ static const _NT_parameter parameters[] = {
     NT_PARAMETER_CV_INPUT("Root CV Input", 0, 2)
     NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output A", 1, 13)
     NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output B", 1, 14)
-    {.name = "Balance", .min = -100, .max = 100, .def = 50, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
-    {.name = "Root", .min = -24, .max = 24, .def = 0, .unit = kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
+    {.name = "Balance", .min = -100, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Root Note", .min = 0, .max = 21, .def = 12, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
     {.name = "Pitch", .min = 0, .max = 127, .def = 69, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
-    {.name = "Spread", .min = 0,  .max = 100, .def = 0, .unit = kNT_unitPercent,   .scaling = 0, .enumStrings = NULL},
-    {.name = "Detune", .min = 0,  .max = 100, .def = 0, .unit = kNT_unitPercent,   .scaling = 0, .enumStrings = NULL},
+    {.name = "Spread", .min = 0,  .max = 12, .def = 0, .unit = kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
+    {.name = "Detune", .min = -100,  .max = 100, .def = 0, .unit = kNT_unitSemitones,   .scaling = kNT_scaling100, .enumStrings = NULL},
 
     {.name = "Mod mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumMod},
     {.name = "Cross FM", .min = 0, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
@@ -111,9 +111,9 @@ static const _NT_parameter parameters[] = {
     {.name = "Freeze", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumFreeze},
 #ifdef LEARN_ENABLED
     {.name = "Learn", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumLearn},
-    {.name = "Crossfade", .min = 0, .max = 100, .def = 100, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
-    {.name = "New note", .min = 0, .max = 150, .def = 0, .unit = kNT_unitNone, .scaling = 0, .enumStrings = NULL},
-    {.name = "Fine Tune", .min = -100, .max = 100, .def = 0, .unit = kNT_unitCents, .scaling = 0, .enumStrings = NULL},
+    {.name = "Crossfade", .min = 0, .max = 100, .def = 12, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL}, // 12% approx 0.125 internal
+    {.name = "New Note MIDI", .min = 0, .max = 127, .def = 60, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
+    {.name = "Fine Tune", .min = -100, .max = 100, .def = 0, .unit = kNT_unitSemitones, .scaling = kNT_scaling100, .enumStrings = NULL},
     {.name = "Add Note", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
     {.name = "Remove Last Note", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
     {.name = "Reset Scale", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
@@ -133,16 +133,17 @@ struct _ntEnosc_DTC
   Scale *current_scale;
   std::atomic<int> next_num_osc;
   Buffer<Frame, kBlockSize> blk;
-  float pitch_pot_base = 69.f; // Default MIDI note
-  float root_pot_base = 0.f;   // Default semitone offset
+  float pitch_pot_base = 69.f;         // Initialized from kParamPitch.def
+  float root_panel_midi_note = 12.f;    // Initialized from kParamRoot.def (0-21 MIDI)
 
   float prev_kParamLearn_val = 0.f;
-  float dtc_manual_learn_offset = 0.f; // Reinstated member to store the offset
+  float dtc_manual_learn_offset = 0.f; 
 
   _ntEnosc_DTC(_NT_algorithm *self) : osc(params) {
     // Initialize 'alt' parameters to their true defaults, as Parameters::clear() uses memset
-    params.alt.numOsc = 16; // Corrected: Default from Parameters::Alt is 16
-    params.alt.crossfade_factor = 0.5_f; // Default from Parameters::Alt
+    params.alt.numOsc = 16; 
+    params.alt.crossfade_factor = 0.125_f; // From kParamCrossfade.def=25
+    // pitch_pot_base and root_panel_midi_note are initialized by their member initializers above.
   }
 };
 
@@ -199,8 +200,8 @@ void parameterChanged(_NT_algorithm *self, int p)
     if (v == 1.f && prev_learn_val == 0.f) { // Learn parameter turned on
       a->dtc->osc.enable_learn();
       a->dtc->osc.enable_pre_listen();
-      // Calculate dtc_manual_learn_offset based on current stable pot values
-      a->dtc->dtc_manual_learn_offset = a->dtc->pitch_pot_base - a->dtc->root_pot_base; 
+      // Calculate dtc_manual_learn_offset: difference between pitch knob and root offset knob
+      a->dtc->dtc_manual_learn_offset = a->dtc->pitch_pot_base - a->dtc->root_panel_midi_note; 
     } else if (v == 0.f && prev_learn_val == 1.f) { // Learn parameter turned off
       a->dtc->osc.disable_learn();
     }
@@ -210,7 +211,7 @@ void parameterChanged(_NT_algorithm *self, int p)
   case kParamManualLearn: {
     if (bool(v)) { // Manual Learn turned on
       a->dtc->osc.enable_pre_listen();
-      a->dtc->osc.enable_follow_new_note();
+      a->osc.enable_follow_new_note();
       // Initialize new_note to current pitch pot base when entering manual learn
       params.new_note = f(a->dtc->pitch_pot_base); 
     } else { // Manual Learn turned off
@@ -224,44 +225,31 @@ void parameterChanged(_NT_algorithm *self, int p)
     break;
   }
   case kParamBalance: {
-    params.balance = f(v / 100.f) * 2_f - 1_f;
+    params.balance = f(v / 100.f); // v is -100 to 100, params.balance is -1.0 to 1.0
     break;
   }
   case kParamRoot:
-    params.root = f(v);
-    a->dtc->root_pot_base = v;
+    // v is the semitone offset from the panel (0-21)
+    a->dtc->root_panel_midi_note = v;
+    // params.root is calculated in step() by combining this with CV
     break;
   case kParamPitch:
-    params.pitch = f(v);
-    a->dtc->pitch_pot_base = v;
+    // params.pitch = f(v); // This is calculated in step() from base, CV, and fine_tune
+    a->dtc->pitch_pot_base = v; // Store panel value for CV calculation and learn offset
     break;
   case kParamSpread: {
-    f sp = f(v / 100.f);
-    sp *= 10_f / f(16);
-    params.spread = sp * 12_f;
+    params.spread = f(v); // v is 0-12 (semitones)
     break;
   }
   case kParamDetune: {
-    f dt = f(v / 100.f);
-    dt = (dt * dt) * (dt * dt);
-    dt *= 10_f / f(16);
-    params.detune = dt;
+    params.detune = f(v / 100.f); // v is -100 to 100 (cents), params.detune is -1.0 to 1.0 (semitones)
     break;
   }
   case kParamModMode:
     params.modulation.mode = ModulationMode(int(v));
     break;
   case kParamModValue: {
-    f m = f(v / 100.f); // 0 … 1 from the panel
-    m *= m; // square curve
-    m *= 4_f / f(params.alt.numOsc);   // Normalise for polyphony
-    switch (params.modulation.mode) {
-      case ONE:    m *= 2.5_f; break;
-      case TWO:    m *= 1.0_f; break;
-      case THREE:  m *= 1.8_f; break;
-    }
-    if (m > 4.999_f) m = 4.999_f; // Safety
-    params.modulation.value = m;
+    params.modulation.value = f(v / 100.f); // v is 0-100, params.modulation.value is 0-1.0
     break;
   }
   case kParamScaleMode: {
@@ -277,16 +265,7 @@ void parameterChanged(_NT_algorithm *self, int p)
     break;
   case kParamTwistValue:
   {
-    f tw = f(v / 100.f);
-    if (params.twist.mode == FEEDBACK) {
-      tw *= tw * 0.7_f;
-    } else if (params.twist.mode == PULSAR) {
-      tw = Math::fast_exp2(tw * 6_f);
-      if (tw < 1_f) tw = 1_f;
-    } else /* CRUSH */ {
-      tw = tw * tw * 0.5_f;
-    }
-    params.twist.value = tw;
+    params.twist.value = f(v / 100.f); // v is 0-100, params.twist.value is 0-1.0
     break;
   }
   case kParamWarpMode:
@@ -294,48 +273,43 @@ void parameterChanged(_NT_algorithm *self, int p)
     break;
   case kParamWarpValue:
   {
-    f wr = f(v / 100.f);
-    if (params.warp.mode == FOLD) {
-      wr = wr * wr;
-      wr = wr * 0.9_f + 0.004_f;
-      if (wr > 0.999_f) wr = 0.999_f;
-    } else /* CHEBY or SEGMENT */ {
-      if (wr >= 0.999_f) wr = 0.999_f;
-    }
-    params.warp.value = wr;
+    params.warp.value = f(v / 100.f); // v is 0-100, params.warp.value is 0-1.0
     break;
   }
   case kParamNumOsc: {
-    int numOsc = roundf((v / 100.f) * (16 - 1) + 1);
-    params.alt.numOsc = std::clamp(numOsc, 1, 16);
+    // v is already in the range 1-16 as per NT_PARAMETER definition
+    params.alt.numOsc = std::clamp(static_cast<int>(roundf(v)), 1, 16);
     break;
   }
   case kParamStereoMode: {
-    int stereo_mode = roundf((v / 100.f) * 2);
-    params.alt.stereo_mode = static_cast<SplitMode>(std::clamp(stereo_mode, 0, 2));
+    // v is already 0, 1, or 2 as per NT_PARAMETER definition
+    params.alt.stereo_mode = static_cast<SplitMode>(std::clamp(static_cast<int>(roundf(v)), 0, 2));
     break;
   }
   case kParamFreezeMode: {
-    int freeze_mode = roundf((v / 100.f) * 2);
-    params.alt.freeze_mode = static_cast<SplitMode>(std::clamp(freeze_mode, 0, 2));
+    // v is already 0, 1, or 2 as per NT_PARAMETER definition
+    params.alt.freeze_mode = static_cast<SplitMode>(std::clamp(static_cast<int>(roundf(v)), 0, 2));
     break;
   }
 #ifdef LEARN_ENABLED
   case kParamCrossfade: {
-    f crossfade_factor = f(v / 100.f) * 0.5_f; // Maps 0-100% to 0-0.5
-    params.alt.crossfade_factor = crossfade_factor;
+    params.alt.crossfade_factor = f(v / 100.f); // v is 0-100, params.alt.crossfade_factor is 0-1.0
     break;
   }
   case kParamNewNote:
-    params.new_note = f(v);
+    params.new_note = f(v); // v is already MIDI 0-127 from kParamNewNote definition
     break;
   case kParamFineTune:
-    params.fine_tune = f(v / 100.f);
+    params.fine_tune = f(v / 100.f); // v is -100 to 100 cents, params.fine_tune is -1.0 to 1.0 semitones
     break;
   case kParamAddNote:
-    if (bool(v)) {
-      // Use dtc_manual_learn_offset for robust new note calculation
-      a->dtc->osc.new_note(params.new_note + f(a->dtc->dtc_manual_learn_offset) + params.fine_tune);
+    if (bool(v)) { // v is 0 or 1 from the enumAction parameter
+      // params.new_note is f (MIDI 0-127)
+      // dtc_manual_learn_offset is float (semitone difference)
+      // params.fine_tune is f (semitone offset +/-1)
+      float note_to_add_float = params.new_note.repr() + a->dtc->dtc_manual_learn_offset + params.fine_tune.repr();
+      float clamped_note_float = std::clamp(note_to_add_float, 0.0f, 127.0f);
+      a->dtc->osc.new_note(f(clamped_note_float));
     }
     break;
   case kParamRemoveLastNote:
@@ -388,15 +362,31 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
 
     for (int frame = 0; frame < numFrames; frame += BS)
     {
-        // Read CV input values for the current block from the first sample of the block
-        // Assuming CV inputs are 0.0 to 1.0, map to +/- 5V range (10 octaves = 120 semitones)
-        // This is a common Eurorack CV scaling.
-        f current_pitch_cv_value = f((busFrames[pitch_cv_bus_idx * numFrames + frame] - 0.5f) * 120.0f);
-        f current_root_cv_value = f((busFrames[root_cv_bus_idx * numFrames + frame] - 0.5f) * 120.0f);
+        // Read CV input values. Assume busFrames provide direct voltage readings.
+        // Convert 1V/Oct to semitone offset (voltage * 12.0f)
+        f current_pitch_cv_value = f(busFrames[pitch_cv_bus_idx * numFrames + frame] * 12.0f);
+        f current_root_cv_value = f(busFrames[root_cv_bus_idx * numFrames + frame] * 12.0f); 
 
-        // Apply CV to parameters, adding to the base pot values
-        dtc->params.pitch = f(dtc->pitch_pot_base) + current_pitch_cv_value;
-        dtc->params.root = f(dtc->root_pot_base) + current_root_cv_value;
+        // Calculate final pitch for the oscillator (MIDI note 0-127)
+        // pitch_pot_base is float (panel MIDI note), CV and fine_tune are f (semitone offsets)
+        float calculated_pitch_float = dtc->pitch_pot_base + current_pitch_cv_value.repr() + dtc->params.fine_tune.repr();
+        dtc->params.pitch = f(std::clamp(calculated_pitch_float, 0.0f, 127.0f));
+
+        // Calculate final root note for the quantizer
+        // root_panel_midi_note is float (panel MIDI note 0-21), CV is f (semitone offset)
+        // params.root is expected to be a 0-11 semitone value (C=0, ..., B=11)
+        float combined_root_midi_float = dtc->root_panel_midi_note + current_root_cv_value.repr();
+        
+        // Clamp the absolute root MIDI to a reasonable practical range before fmodf.
+        // Panel range for root is 0-21. CV can shift this.
+        float clamped_abs_root_midi = std::clamp(combined_root_midi_float, 0.0f, 48.0f); // Approx 4 octaves range for root context
+
+        float root_semitone_0_11 = fmodf(clamped_abs_root_midi, 12.0f);
+        if (root_semitone_0_11 < 0.0f) { // Ensure positive result for fmodf
+            root_semitone_0_11 += 12.0f;
+        }
+        // Ensure it's strictly within 0-11 and an integer representation (roundf)
+        dtc->params.root = f(roundf(std::fmin(root_semitone_0_11, 11.999f))); // Use 11.999f before roundf to avoid 12
 
         // produce BS stereo samples in dtc->blk
         dtc->osc.Process(dtc->blk);
