@@ -54,6 +54,7 @@ enum {
   kParamStereoMode,
   kParamFreezeMode,
   kParamFreeze,
+#ifdef LEARN_ENABLED
   kParamLearn,
   kParamCrossfade,
 
@@ -63,7 +64,7 @@ enum {
   kParamRemoveLastNote,
   kParamResetScale,
   kParamManualLearn,
-
+#endif
   kNumParams
 };
 
@@ -108,15 +109,16 @@ static const _NT_parameter parameters[] = {
     {.name = "Stereo mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumSplit},
     {.name = "Freeze mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumSplit},
     {.name = "Freeze", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumFreeze},
+#ifdef LEARN_ENABLED
     {.name = "Learn", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumLearn},
-    {.name = "Crossfade", .min = 0, .max = 100, .def = 12, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
-
+    {.name = "Crossfade", .min = 0, .max = 100, .def = 100, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
     {.name = "New note", .min = 0, .max = 150, .def = 0, .unit = kNT_unitNone, .scaling = 0, .enumStrings = NULL},
     {.name = "Fine Tune", .min = -100, .max = 100, .def = 0, .unit = kNT_unitCents, .scaling = 0, .enumStrings = NULL},
     {.name = "Add Note", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
     {.name = "Remove Last Note", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
     {.name = "Reset Scale", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
     {.name = "Manual Learn", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumLearn},
+#endif
 };
 // clang-format off
 
@@ -135,7 +137,7 @@ struct _ntEnosc_DTC
   float root_pot_base = 0.f;   // Default semitone offset
 
   float prev_kParamLearn_val = 0.f;
-  float dtc_manual_learn_offset = 0.f; // New member to store the offset
+  float dtc_manual_learn_offset = 0.f; // Reinstated member to store the offset
 
   _ntEnosc_DTC(_NT_algorithm *self) : osc(params) {
     // Initialize 'alt' parameters to their true defaults, as Parameters::clear() uses memset
@@ -188,15 +190,17 @@ void parameterChanged(_NT_algorithm *self, int p)
   _ntEnosc_Alg *a = (_ntEnosc_Alg *)self;
   auto &params = a->dtc->params;
   float v = self->v[p];
-  float prev_learn_val = a->dtc->prev_kParamLearn_val;
 
   // All parameters are directly handled, no UI modes needed
   switch (p) {
+#ifdef LEARN_ENABLED
   case kParamLearn: {
+    float prev_learn_val = a->dtc->prev_kParamLearn_val;
     if (v == 1.f && prev_learn_val == 0.f) { // Learn parameter turned on
       a->dtc->osc.enable_learn();
       a->dtc->osc.enable_pre_listen();
-      a->dtc->dtc_manual_learn_offset = a->dtc->osc.lowest_pitch().repr() - params.root.repr();
+      // Calculate dtc_manual_learn_offset based on current stable pot values
+      a->dtc->dtc_manual_learn_offset = a->dtc->pitch_pot_base - a->dtc->root_pot_base; 
     } else if (v == 0.f && prev_learn_val == 1.f) { // Learn parameter turned off
       a->dtc->osc.disable_learn();
     }
@@ -207,11 +211,14 @@ void parameterChanged(_NT_algorithm *self, int p)
     if (bool(v)) { // Manual Learn turned on
       a->dtc->osc.enable_pre_listen();
       a->dtc->osc.enable_follow_new_note();
+      // Initialize new_note to current pitch pot base when entering manual learn
+      params.new_note = f(a->dtc->pitch_pot_base); 
     } else { // Manual Learn turned off
       a->dtc->osc.disable_follow_new_note();
     }
     break;
   }
+#endif
   case kParamFreeze: {
     a->dtc->osc.set_freeze(bool(v));
     break;
@@ -313,6 +320,7 @@ void parameterChanged(_NT_algorithm *self, int p)
     params.alt.freeze_mode = static_cast<SplitMode>(std::clamp(freeze_mode, 0, 2));
     break;
   }
+#ifdef LEARN_ENABLED
   case kParamCrossfade: {
     f crossfade_factor = f(v / 100.f) * 0.5_f; // Maps 0-100% to 0-0.5
     params.alt.crossfade_factor = crossfade_factor;
@@ -326,6 +334,7 @@ void parameterChanged(_NT_algorithm *self, int p)
     break;
   case kParamAddNote:
     if (bool(v)) {
+      // Use dtc_manual_learn_offset for robust new note calculation
       a->dtc->osc.new_note(params.new_note + f(a->dtc->dtc_manual_learn_offset) + params.fine_tune);
     }
     break;
@@ -339,6 +348,7 @@ void parameterChanged(_NT_algorithm *self, int p)
       a->dtc->osc.reset_current_scale();
     }
     break;
+#endif
   default:
     break;
   }
