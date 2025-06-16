@@ -133,16 +133,16 @@ struct _ntEnosc_DTC
   Scale *current_scale;
   std::atomic<int> next_num_osc;
   Buffer<Frame, kBlockSize> blk;
-  float pitch_pot_base = 69.f;         // Initialized from kParamPitch.def
-  float root_panel_midi_note = 12.f;    // Initialized from kParamRoot.def (0-21 MIDI)
+  int16_t pitch_pot_base = 0;         // Initialized from kParamPitch.def (MIDI 0-127)
+  int16_t root_panel_midi_note = 0;    // Initialized from kParamRoot.def (MIDI 0-21)
 
-  float prev_kParamLearn_val = 0.f;
-  float dtc_manual_learn_offset = 0.f; 
+  int16_t prev_kParamLearn_val = 0; // Stores the previous state of kParamLearn (0 or 1)
+  int16_t dtc_manual_learn_offset = 0; // Stores difference between pitch_pot_base and root_panel_midi_note (semitones)
 
   _ntEnosc_DTC(_NT_algorithm *self) : osc(params) {
     // Initialize 'alt' parameters to their true defaults, as Parameters::clear() uses memset
-    params.alt.numOsc = 16; 
-    params.alt.crossfade_factor = 0.125_f; // From kParamCrossfade.def=25
+    params.alt.numOsc = 1; 
+    params.alt.crossfade_factor = 0.0_f; // From kParamCrossfade.def=25
     // pitch_pot_base and root_panel_midi_note are initialized by their member initializers above.
   }
 };
@@ -190,28 +190,28 @@ void parameterChanged(_NT_algorithm *self, int p)
 {
   _ntEnosc_Alg *a = (_ntEnosc_Alg *)self;
   auto &params = a->dtc->params;
-  float v = self->v[p];
+  int16_t val = self->v[p]; // Use int16_t directly
 
   // All parameters are directly handled, no UI modes needed
   switch (p) {
 #ifdef LEARN_ENABLED
   case kParamLearn: {
-    float prev_learn_val = a->dtc->prev_kParamLearn_val;
-    if (v == 1.f && prev_learn_val == 0.f) { // Learn parameter turned on
+    int16_t prev_learn_val = a->dtc->prev_kParamLearn_val;
+    if (val == 1 && prev_learn_val == 0) { // Learn parameter turned on (val is 0 or 1)
       a->dtc->osc.enable_learn();
       a->dtc->osc.enable_pre_listen();
       // Calculate dtc_manual_learn_offset: difference between pitch knob and root offset knob
       a->dtc->dtc_manual_learn_offset = a->dtc->pitch_pot_base - a->dtc->root_panel_midi_note; 
-    } else if (v == 0.f && prev_learn_val == 1.f) { // Learn parameter turned off
+    } else if (val == 0 && prev_learn_val == 1) { // Learn parameter turned off
       a->dtc->osc.disable_learn();
     }
-    a->dtc->prev_kParamLearn_val = v;
+    a->dtc->prev_kParamLearn_val = val; 
     break;
   }
   case kParamManualLearn: {
-    if (bool(v)) { // Manual Learn turned on
+    if (bool(val)) { // Manual Learn turned on (val is 0 or 1)
       a->dtc->osc.enable_pre_listen();
-      a->osc.enable_follow_new_note();
+      a->dtc->osc.enable_follow_new_note();
       // Initialize new_note to current pitch pot base when entering manual learn
       params.new_note = f(a->dtc->pitch_pot_base); 
     } else { // Manual Learn turned off
@@ -221,104 +221,100 @@ void parameterChanged(_NT_algorithm *self, int p)
   }
 #endif
   case kParamFreeze: {
-    a->dtc->osc.set_freeze(bool(v));
+    a->dtc->osc.set_freeze(bool(val)); // val is 0 or 1
     break;
   }
   case kParamBalance: {
-    params.balance = f(v / 100.f); // v is -100 to 100, params.balance is -1.0 to 1.0
+    params.balance = f(val / 100.f); // val promoted to float for division
     break;
   }
   case kParamRoot:
-    // v is the semitone offset from the panel (0-21)
-    a->dtc->root_panel_midi_note = v;
+    a->dtc->root_panel_midi_note = val; 
     // params.root is calculated in step() by combining this with CV
     break;
   case kParamPitch:
-    // params.pitch = f(v); // This is calculated in step() from base, CV, and fine_tune
-    a->dtc->pitch_pot_base = v; // Store panel value for CV calculation and learn offset
+    // params.pitch = f(val); // This is calculated in step() from base, CV, and fine_tune
+    a->dtc->pitch_pot_base = val; // Store panel value for CV calculation and learn offset
     break;
   case kParamSpread: {
-    params.spread = f(v); // v is 0-12 (semitones)
+    params.spread = f(val); // val implicitly converted to float for f() argument
     break;
   }
   case kParamDetune: {
-    params.detune = f(v / 100.f); // v is -100 to 100 (cents), params.detune is -1.0 to 1.0 (semitones)
+    params.detune = f(val / 100.f); // val promoted to float for division
     break;
   }
   case kParamModMode:
-    params.modulation.mode = ModulationMode(int(v));
+    params.modulation.mode = ModulationMode(val); // Explicit cast to enum is good
     break;
   case kParamModValue: {
-    params.modulation.value = f(v / 100.f); // v is 0-100, params.modulation.value is 0-1.0
+    params.modulation.value = f(val / 100.f); // val promoted to float for division
     break;
   }
   case kParamScaleMode: {
-    params.scale.mode = ScaleMode(int(v));
+    params.scale.mode = ScaleMode(val); // Explicit cast to enum is good
     break;
   }
   case kParamScaleValue: {
-    params.scale.value = int(v + 0.5f);
+    params.scale.value = val; // Implicit conversion from int16_t to int is fine
     break;
   }
   case kParamTwistMode:
-    params.twist.mode = TwistMode(int(v));
+    params.twist.mode = TwistMode(val); // Explicit cast to enum is good
     break;
   case kParamTwistValue:
   {
-    params.twist.value = f(v / 100.f); // v is 0-100, params.twist.value is 0-1.0
+    params.twist.value = f(val / 100.f); // val promoted to float for division
     break;
   }
   case kParamWarpMode:
-    params.warp.mode = WarpMode(int(v));
+    params.warp.mode = WarpMode(val); // Explicit cast to enum is good
     break;
   case kParamWarpValue:
   {
-    params.warp.value = f(v / 100.f); // v is 0-100, params.warp.value is 0-1.0
+    params.warp.value = f(val / 100.f); // val promoted to float for division
     break;
   }
   case kParamNumOsc: {
-    // v is already in the range 1-16 as per NT_PARAMETER definition
-    params.alt.numOsc = std::clamp(static_cast<int>(roundf(v)), 1, 16);
+    params.alt.numOsc = val; // Implicit conversion from int16_t to int is fine
     break;
   }
   case kParamStereoMode: {
-    // v is already 0, 1, or 2 as per NT_PARAMETER definition
-    params.alt.stereo_mode = static_cast<SplitMode>(std::clamp(static_cast<int>(roundf(v)), 0, 2));
+    params.alt.stereo_mode = static_cast<SplitMode>(val); // Explicit cast to enum is good
     break;
   }
   case kParamFreezeMode: {
-    // v is already 0, 1, or 2 as per NT_PARAMETER definition
-    params.alt.freeze_mode = static_cast<SplitMode>(std::clamp(static_cast<int>(roundf(v)), 0, 2));
+    params.alt.freeze_mode = static_cast<SplitMode>(val); // Explicit cast to enum is good
     break;
   }
 #ifdef LEARN_ENABLED
   case kParamCrossfade: {
-    params.alt.crossfade_factor = f(v / 100.f); // v is 0-100, params.alt.crossfade_factor is 0-1.0
+    params.alt.crossfade_factor = f(val / 100.f); // val promoted to float for division
     break;
   }
   case kParamNewNote:
-    params.new_note = f(v); // v is already MIDI 0-127 from kParamNewNote definition
+    params.new_note = f(val); // val implicitly converted to float for f() argument
     break;
   case kParamFineTune:
-    params.fine_tune = f(v / 100.f); // v is -100 to 100 cents, params.fine_tune is -1.0 to 1.0 semitones
+    params.fine_tune = f(val / 100.f); // val promoted to float for division
     break;
   case kParamAddNote:
-    if (bool(v)) { // v is 0 or 1 from the enumAction parameter
+    if (bool(val)) { // val is 0 or 1
       // params.new_note is f (MIDI 0-127)
-      // dtc_manual_learn_offset is float (semitone difference)
+      // dtc_manual_learn_offset is int16_t (semitone difference)
       // params.fine_tune is f (semitone offset +/-1)
-      float note_to_add_float = params.new_note.repr() + a->dtc->dtc_manual_learn_offset + params.fine_tune.repr();
+      float note_to_add_float = params.new_note.repr() + static_cast<float>(a->dtc->dtc_manual_learn_offset) + params.fine_tune.repr();
       float clamped_note_float = std::clamp(note_to_add_float, 0.0f, 127.0f);
       a->dtc->osc.new_note(f(clamped_note_float));
     }
     break;
   case kParamRemoveLastNote:
-    if (bool(v)) {
+    if (bool(val)) { // val is 0 or 1
       a->dtc->osc.remove_last_note();
     }
     break;
   case kParamResetScale:
-    if (bool(v)) {
+    if (bool(val)) { // val is 0 or 1
       a->dtc->osc.reset_current_scale();
     }
     break;
