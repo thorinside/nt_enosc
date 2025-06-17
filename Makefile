@@ -9,6 +9,9 @@ BUILD_DIR   := build
 ENOSC_DIR   := enosc
 PLUGIN_DIR  := plugins
 INCLUDE_PATH := $(NT_API_PATH)/include
+ENOSC_DATA_CC := $(ENOSC_DIR)/data.cc
+ENOSC_DATA_HH := $(ENOSC_DIR)/data.hh
+DYNAMIC_DATA_CC := dynamic_data.cc
 
 ###############################################################################
 # Toolchain and flags
@@ -33,12 +36,13 @@ CXXFLAGS += -ffunction-sections -fdata-sections
 ENOSC_EXTRA_SRCS := \
     $(ENOSC_DIR)/lib/easiglib/math.cc \
     $(ENOSC_DIR)/lib/easiglib/dsp.cc \
-		$(ENOSC_DIR)/data.cc \
-		dynamic_data.cc
+	$(ENOSC_DATA_CC) \
+	$(DYNAMIC_DATA_CC)
 
 # ---- objects for the files inside enosc/ -----------------------------------
 ENOSC_OBJ := $(patsubst ./%.cc,$(BUILD_DIR)/%.o,$(filter ./%.cc,$(ENOSC_EXTRA_SRCS)))
 ENOSC_OBJ += $(patsubst $(ENOSC_DIR)/%.cc,$(BUILD_DIR)/enosc/%.o,$(filter $(ENOSC_DIR)/%.cc,$(ENOSC_EXTRA_SRCS)))
+ENOSC_OBJ += $(patsubst %.cc,$(BUILD_DIR)/%.o,$(filter %.cc,$(ENOSC_EXTRA_SRCS)))
 
 ###############################################################################
 # Project-root sources / objects  (e.g. nt_enosc.cpp)
@@ -58,6 +62,18 @@ PLUGIN_O := $(PLUGIN_DIR)/nt_enosc.o
 all: $(PLUGIN_O)
 
 ###############################################################################
+# Generate sources
+###############################################################################
+GENERATED_SRCS = $(DYNAMIC_DATA_CC) $(ENOSC_DATA_CC)
+
+$(DYNAMIC_DATA_CC): gen.py
+	python3 gen.py
+
+$(ENOSC_DATA_CC) $(ENOSC_DATA_HH): $(ENOSC_DIR)/data/data.py $(ENOSC_DIR)/lib/easiglib/data_compiler.py
+	@echo "--- Generating Enosc data files ---"
+	(cd $(ENOSC_DIR) && PYTHONPATH=lib/easiglib python3 data/data.py)
+
+###############################################################################
 # Link: merge everything into one relocatable object
 ###############################################################################
 $(PLUGIN_O): $(INTERMEDIATE_OBJECTS)
@@ -69,13 +85,13 @@ $(PLUGIN_O): $(INTERMEDIATE_OBJECTS)
 ###############################################################################
 # Pattern rules – project-root .cpp/.cc → build/*.o
 ###############################################################################
-$(BUILD_DIR)/%.o: %.cpp $(ENOSC_DATA_HH)
+$(BUILD_DIR)/%.o: %.cpp
 	@echo "Compiling $< → $@"
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 # Pattern rule – project-root .cc → build/*.o
-$(BUILD_DIR)/%.o: %.cc $(ENOSC_DATA_HH)
+$(BUILD_DIR)/%.o: %.cc
 	@echo "Compiling $< → $@"
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
@@ -88,7 +104,7 @@ $(BUILD_DIR)/$(ENOSC_DIR)/%.o: $(ENOSC_DIR)/%.cc $(ENOSC_DATA_HH)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-$(BUILD_DIR)/$(ENOSC_DIR)/%.o: $(ENOSC_DIR)/%.cpp $(ENOSC_DATA_HH)
+$(BUILD_DIR)/$(ENOSC_DIR)/%.o: $(ENOSC_DIR)/%.cpp
 	@echo "Compiling $< → $@"
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
@@ -101,22 +117,15 @@ $(DATA_O): $(ENOSC_DATA_CC) $(ENOSC_DATA_HH)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-###############################################################################
-# Rule to **generate** enosc/data.{cc,hh}
-###############################################################################
-#$(ENOSC_DATA_CC) $(ENOSC_DATA_HH): \
-#        $(ENOSC_DIR)/data/data.py $(ENOSC_DIR)/lib/easiglib/data_compiler.py
-#	@echo "--- Generating Enosc data files ---"
-#	(cd $(ENOSC_DIR) && PYTHONPATH=lib/easiglib python3 data/data.py)
+# Make sure generated sources are created before compiling
+$(OBJ) $(ENOSC_OBJ): | $(GENERATED_SRCS)
 
 ###############################################################################
 # Convenience targets
 ###############################################################################
 clean:
 	rm -rf $(BUILD_DIR)
-
-enosc-clean:
-	rm -f $(ENOSC_DATA_CC) $(ENOSC_DATA_HH)
+	rm -f $(DYNAMIC_DATA_CC) $(ENOSC_DATA_CC) $(ENOSC_DATA_HH)
 
 check: all
 	@echo "Checking for undefined symbols in $(PLUGIN_O)…"
@@ -134,7 +143,7 @@ check: all
 				echo "✅  .bss within limit."; \
 			fi
 
-.PHONY: all clean check enosc-clean
+.PHONY: all clean check
 
 ###############################################################################
 # Auto-generated header dependency includes
