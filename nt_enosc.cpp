@@ -142,10 +142,6 @@ struct _ntEnosc_DTC
   int16_t dtc_manual_learn_offset = 0; // Stores difference between pitch_pot_base and root_panel_midi_note (semitones)
 
   _ntEnosc_DTC(_NT_algorithm *self) : osc(params) {
-    // Initialize 'alt' parameters to their true defaults, as Parameters::clear() uses memset
-    params.alt.numOsc = 1; 
-    params.alt.crossfade_factor = 0.0_f; // From kParamCrossfade.def=25
-    // pitch_pot_base and root_panel_midi_note are initialized by their member initializers above.
   }
 };
 
