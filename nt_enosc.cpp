@@ -91,7 +91,9 @@ static const _NT_parameter parameters[] = {
     {.name = "Root Note", .min = 0, .max = 21, .def = 12, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
     {.name = "Pitch", .min = 0, .max = 127, .def = 0, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
     {.name = "Spread", .min = 0,  .max = 12, .def = 4, .unit = kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
-    {.name = "Detune", .min = -100,  .max = 100, .def = 0, .unit = kNT_unitSemitones,   .scaling = kNT_scaling100, .enumStrings = NULL},
+    
+    //detune should always be positive
+    {.name = "Detune", .min = 0,  .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
 
     {.name = "Mod mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumMod},
     {.name = "Cross FM", .min = 0, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
@@ -225,7 +227,11 @@ void parameterChanged(_NT_algorithm *self, int p)
     break;
   }
   case kParamBalance: {
-    params.balance = f(val / 100.f); // val promoted to float for division
+    // Original hardware logic: f(val) -> -1..1 -> cubic -> *4 -> exp2 -> 0.0625..16
+    f balance = f(val / 100.f); // val is -100 to 100 -> f is -1.0 to 1.0
+    balance *= balance * balance;     // Apply cubic curve
+    balance *= 4.0_f;                 // Scale to -4..4
+    params.balance = Math::fast_exp2(balance); // Apply exponential curve
     break;
   }
   case kParamRoot:
@@ -237,11 +243,19 @@ void parameterChanged(_NT_algorithm *self, int p)
     a->dtc->pitch_pot_base = val; // Store panel value for CV calculation and learn offset
     break;
   case kParamSpread: {
-    params.spread = f(val); // val implicitly converted to float for f() argument
+     // Original hardware logic: f(val) -> 0..1 -> scale by 10/16 -> * kSpreadRange (12)
+    f spread_val = f(val); // val is 0-12
+    // The original hardware scaled this by a factor based on NumOsc,
+    // let's apply a similar scaling.
+    spread_val *= f(10.0f / 16.0f);
+    params.spread = spread_val;
     break;
   }
   case kParamDetune: {
-    params.detune = f(val / 100.f); // val promoted to float for division
+    f detune_val = f(val / 100.f); // val is 0-100 -> f is 0.0-1.0
+    detune_val = (detune_val * detune_val) * (detune_val * detune_val); // Apply x^4 curve
+    detune_val *= f(10.0f / 16.0f); // Scale like the original (kMaxNumOsc is 16)
+    params.detune = detune_val;
     break;
   }
   case kParamModMode:
@@ -368,21 +382,22 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
         float calculated_pitch_float = dtc->pitch_pot_base + current_pitch_cv_value.repr() + dtc->params.fine_tune.repr();
         dtc->params.pitch = f(std::clamp(calculated_pitch_float, 0.0f, 127.0f));
 
-        // Calculate final root note for the quantizer
-        // root_panel_midi_note is float (panel MIDI note 0-21), CV is f (semitone offset)
-        // params.root is expected to be a 0-11 semitone value (C=0, ..., B=11)
-        float combined_root_midi_float = dtc->root_panel_midi_note + current_root_cv_value.repr();
-        
-        // Clamp the absolute root MIDI to a reasonable practical range before fmodf.
-        // Panel range for root is 0-21. CV can shift this.
-        float clamped_abs_root_midi = std::clamp(combined_root_midi_float, 0.0f, 48.0f); // Approx 4 octaves range for root context
+        // The "Pitch" knob (0-127) now acts as a bipolar offset around a center point (e.g., C4/MIDI 60)
+        // This mimics the original hardware's behavior.
+        const float pitch_range = 72.0f; // 6 octaves, same as kPitchPotRange
+        float pitch_offset = (dtc->pitch_pot_base / 127.f) * pitch_range;
+        pitch_offset -= pitch_range / 2.0f; // Center the range, making it -36 to +36
 
-        float root_semitone_0_11 = fmodf(clamped_abs_root_midi, 12.0f);
-        if (root_semitone_0_11 < 0.0f) { // Ensure positive result for fmodf
-            root_semitone_0_11 += 12.0f;
-        }
-        // Ensure it's strictly within 0-11 and an integer representation (roundf)
-        dtc->params.root = f(roundf(std::fmin(root_semitone_0_11, 11.999f))); // Use 11.999f before roundf to avoid 12
+        // The final pitch combines a fixed center note, the bipolar offset, CV, and fine tune
+        dtc->params.pitch = f(60.0f + pitch_offset) + current_pitch_cv_value + dtc->params.fine_tune;
+        
+        // The "Root" knob (0-21) is also a bipolar offset.
+        const float root_range = 21.0f;
+        float root_offset = (dtc->root_panel_midi_note / 21.f) * root_range;
+
+        // The final root is the offset plus CV.
+        // The Scale::Process function will handle wrapping this into the correct octave.
+        dtc->params.root = f(root_offset) + current_root_cv_value;
 
         // produce BS stereo samples in dtc->blk
         dtc->osc.Process(dtc->blk);
