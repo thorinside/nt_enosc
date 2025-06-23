@@ -34,7 +34,6 @@ CXXFLAGS += -ffunction-sections -fdata-sections
 
 # Sources that live *inside* $(ENOSC_DIR)
 ENOSC_EXTRA_SRCS := \
-    $(ENOSC_DIR)/lib/easiglib/math.cc \
     $(ENOSC_DIR)/lib/easiglib/dsp.cc \
 	$(ENOSC_DATA_CC) \
 	$(DYNAMIC_DATA_CC)

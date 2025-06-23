@@ -5,6 +5,7 @@ sine_size = 513
 cheby_tables = 16
 cheby_size = 513
 fold_size = 1025
+exp2_size = 1024
 
 
 class MagicSine:
@@ -105,6 +106,14 @@ def gen_triangles():
     return arr
 
 # === Write .cc file ===
+def gen_exp2_table():
+    table = np.zeros(exp2_size, dtype=np.uint32)
+    x = 1.0
+    increment = 2.0**(1.0 / exp2_size)
+    for i in range(exp2_size):
+        table[i] = int(x * (1 << 23))
+        x *= increment
+    return table
 
 def write_cc():
     with open("dynamic_data.cc", "w") as f:
@@ -148,6 +157,17 @@ def write_cc():
             f.write(', '.join(f'{x:.8f}_f' for x in row))
             f.write(' },\n')
         f.write('}}};\n\n')
+
+    # --- MATH TABLE ---
+    with open("math.cc", "w") as f:
+        f.write('#include "math.hh"\n\n')
+        f.write(f'uint32_t Math::exp2_table[{exp2_size}] = {{\n') # Corrected: only one {
+        for i in range(0, len(gen_exp2_table()), 8):
+            row = gen_exp2_table()[i:i+8]
+            f.write('    ' + ', '.join(map(str, row)) + ',\n')
+        f.write('};\n\n')
+        # Empty constructor definition in case it is still needed by the build system.
+        f.write('Math::Math() { }\n')
 
 if __name__ == "__main__":
     write_cc()
