@@ -1,4 +1,4 @@
-// #define DYNAMIC_DATA_LOCAL_HH
+
 #include "enosc_plugin_stubs.h"
 
 #include <atomic>
@@ -21,6 +21,33 @@
 #include "./enosc/src/parameters.hh"
 #include "./enosc/src/polyptic_oscillator.hh"
 #include "./enosc/src/quantizer.hh"
+#include <algorithm>
+
+// A simple class for parameter smoothing.
+class Smoother {
+public:
+  Smoother() : current_(0.0f), target_(0.0f), alpha_(0.0005f) {}
+
+  void set_target(float target) { target_ = target; }
+
+  // Set target without interpolation
+  void set_hard(float value) {
+    target_ = value;
+    current_ = value;
+  }
+
+  float next() {
+    current_ += alpha_ * (target_ - current_);
+    return current_;
+  }
+
+  float current() const { return current_; }
+
+private:
+  float current_;
+  float target_;
+  float alpha_;
+};
 
 // Plugin parameters mapping to EnOSC engine Parameters
 enum {
@@ -83,88 +110,93 @@ const int kNumBusses = 28;
 // Parameter definitions
 // clang-format off
 static const _NT_parameter parameters[] = {
-    NT_PARAMETER_CV_INPUT("Pitch CV Input", 0, 1)
-    NT_PARAMETER_CV_INPUT("Root CV Input", 0, 2)
-    NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output A", 1, 13)
-    NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output B", 1, 14)
-    {.name = "Balance", .min = -100, .max = 100, .def = 100, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
-    {.name = "Root Note", .min = 0, .max = 21, .def = 12, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
-    {.name = "Pitch", .min = 0, .max = 127, .def = 0, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
-    {.name = "Spread", .min = 0,  .max = 12, .def = 4, .unit = kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
+    {.name = "Pitch CV Input", .min = 0, .max = 28, .def = 1, .unit = (uint8_t)kNT_unitCvInput, .scaling = 0, .enumStrings = NULL},
+    {.name = "Root CV Input", .min = 0, .max = 28, .def = 2, .unit = (uint8_t)kNT_unitCvInput, .scaling = 0, .enumStrings = NULL},
+    {.name = "Output A", .min = 1, .max = 28, .def = 13, .unit = (uint8_t)kNT_unitAudioOutput, .scaling = 0, .enumStrings = NULL},
+    {.name = "Output B", .min = 1, .max = 28, .def = 14, .unit = (uint8_t)kNT_unitAudioOutput, .scaling = 0, .enumStrings = NULL},
+    {.name = "Balance", .min = -100, .max = 100, .def = 100, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Root Note", .min = 0, .max = 21, .def = 12, .unit = (uint8_t)kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
+    {.name = "Pitch", .min = 0, .max = 127, .def = 0, .unit = (uint8_t)kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
+    {.name = "Spread", .min = 0,  .max = 12, .def = 4, .unit = (uint8_t)kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
     
     //detune should always be positive
-    {.name = "Detune", .min = 0,  .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Detune", .min = 0,  .max = 100, .def = 0, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
 
-    {.name = "Mod mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumMod},
-    {.name = "Cross FM", .min = 0, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Mod mode", .min = 0, .max = 2, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumMod},
+    {.name = "Cross FM", .min = 0, .max = 100, .def = 0, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
 
-    {.name = "Scale Mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumScale},
-    {.name = "Scale Preset", .min = 0, .max = 9, .def = 0, .unit = kNT_unitNone, .scaling = 0, .enumStrings = NULL},
+    {.name = "Scale Mode", .min = 0, .max = 2, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumScale},
+    {.name = "Scale Preset", .min = 0, .max = 9, .def = 0, .unit = (uint8_t)kNT_unitNone, .scaling = 0, .enumStrings = NULL},
 
-    {.name = "Twist mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumTwist},
-    {.name = "Twist", .min = 0, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Twist mode", .min = 0, .max = 2, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumTwist},
+    {.name = "Twist", .min = 0, .max = 100, .def = 0, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
 
-    {.name = "Warp mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumWarp},
-    {.name = "Warp", .min = 0, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Warp mode", .min = 0, .max = 2, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumWarp},
+    {.name = "Warp", .min = 0, .max = 100, .def = 0, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
 
-    {.name = "Num Osc", .min = 1, .max = 16, .def = 16, .unit = kNT_unitNone, .scaling = 0, .enumStrings = NULL},
-    {.name = "Stereo mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumSplit},
-    {.name = "Freeze mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumSplit},
-    {.name = "Freeze", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumFreeze},
+    {.name = "Num Osc", .min = 1, .max = 16, .def = 16, .unit = (uint8_t)kNT_unitNone, .scaling = 0, .enumStrings = NULL},
+    {.name = "Stereo mode", .min = 0, .max = 2, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumSplit},
+    {.name = "Freeze mode", .min = 0, .max = 2, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumSplit},
+    {.name = "Freeze", .min = 0, .max = 1, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumFreeze},
 #ifdef LEARN_ENABLED
-    {.name = "Learn", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumLearn},
-    {.name = "Crossfade", .min = 0, .max = 100, .def = 12, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL}, // 12% approx 0.125 internal
-    {.name = "New Note MIDI", .min = 0, .max = 127, .def = 60, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
-    {.name = "Fine Tune", .min = -100, .max = 100, .def = 0, .unit = kNT_unitSemitones, .scaling = kNT_scaling100, .enumStrings = NULL},
-    {.name = "Add Note", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
-    {.name = "Remove Last Note", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
-    {.name = "Reset Scale", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
-    {.name = "Manual Learn", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumLearn},
+    {.name = "Learn", .min = 0, .max = 1, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumLearn},
+    {.name = "Crossfade", .min = 0, .max = 100, .def = 12, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL}, // 12% approx 0.125 internal
+    {.name = "New Note MIDI", .min = 0, .max = 127, .def = 60, .unit = (uint8_t)kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
+    {.name = "Fine Tune", .min = -100, .max = 100, .def = 0, .unit = (uint8_t)kNT_unitSemitones, .scaling = (uint8_t)kNT_scaling100, .enumStrings = NULL},
+    {.name = "Add Note", .min = 0, .max = 1, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
+    {.name = "Remove Last Note", .min = 0, .max = 1, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
+    {.name = "Reset Scale", .min = 0, .max = 1, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
+    {.name = "Manual Learn", .min = 0, .max = 1, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumLearn},
 #endif
 };
-// clang-format off
+// clang-format on
 
 // Forward declaration for parameterChanged
 void parameterChanged(_NT_algorithm *self, int p);
 
 // DTC struct holds algorithm state and oscillator instance
-struct _ntEnosc_DTC
-{
+struct _ntEnosc_DTC {
   Parameters params;
   PolypticOscillator<kBlockSize> osc;
   Scale *current_scale;
   std::atomic<int> next_num_osc;
   Buffer<Frame, kBlockSize> blk;
-  int16_t pitch_pot_base = 0;         // Initialized from kParamPitch.def (MIDI 0-127)
-  int16_t root_panel_midi_note = 0;    // Initialized from kParamRoot.def (MIDI 0-21)
 
-  int16_t prev_kParamLearn_val = 0; // Stores the previous state of kParamLearn (0 or 1)
-  int16_t dtc_manual_learn_offset = 0; // Stores difference between pitch_pot_base and root_panel_midi_note (semitones)
+  // Smoothers
+  Smoother s_balance;
+  Smoother s_root;
+  Smoother s_pitch;
+  Smoother s_spread;
+  Smoother s_detune;
+  Smoother s_mod_value;
+  Smoother s_twist_value;
+  Smoother s_warp_value;
+#ifdef LEARN_ENABLED
+  Smoother s_crossfade;
+  Smoother s_fine_tune;
+  Smoother s_new_note;
+#endif
 
-  _ntEnosc_DTC(_NT_algorithm *self) : osc(params) {
-  }
+  int16_t prev_kParamLearn_val = 0;
+  float dtc_manual_learn_offset = 0;
+
+  _ntEnosc_DTC(_NT_algorithm *self) : osc(params) {}
 };
 
-struct _ntEnosc_Alg : public _NT_algorithm
-{
+struct _ntEnosc_Alg : public _NT_algorithm {
   _ntEnosc_Alg(_ntEnosc_DTC *d) : dtc(d) {}
   _ntEnosc_DTC *dtc;
 };
 
-// Define the global pointer here now that it will point to DRAM
-DynamicData *g_DynamicData;
 
-void calculateStaticRequirements(_NT_staticRequirements &req)
-{
+
+void calculateStaticRequirements(_NT_staticRequirements &req) {
   req.dram = 0;
 }
 
-void initialise(_NT_staticMemoryPtrs &ptrs, const _NT_staticRequirements &req)
-{
-}
+void initialise(_NT_staticMemoryPtrs &ptrs, const _NT_staticRequirements &req) {}
 
-void calculateRequirements(_NT_algorithmRequirements &req, const int32_t *)
-{
+void calculateRequirements(_NT_algorithmRequirements &req, const int32_t *) {
   req.numParameters = kNumParams;
   req.sram = sizeof(_ntEnosc_Alg);
   req.dtc = sizeof(_ntEnosc_DTC);
@@ -173,160 +205,103 @@ void calculateRequirements(_NT_algorithmRequirements &req, const int32_t *)
 
 _NT_algorithm *construct(const _NT_algorithmMemoryPtrs &ptrs,
                          const _NT_algorithmRequirements &req,
-                         const int32_t *)
-{
+                         const int32_t *) {
   auto *alg = new (ptrs.sram) _ntEnosc_Alg(nullptr);
   alg->parameters = parameters;
   alg->parameterPages = nullptr;
   auto *d = new (ptrs.dtc) _ntEnosc_DTC(alg);
   alg->dtc = d;
 
+  // Initialize smoothers with default values from parameters array
+  d->s_balance.set_hard(parameters[kParamBalance].def);
+  d->s_root.set_hard(parameters[kParamRoot].def);
+  d->s_pitch.set_hard(parameters[kParamPitch].def);
+  d->s_spread.set_hard(parameters[kParamSpread].def);
+  d->s_detune.set_hard(parameters[kParamDetune].def);
+  d->s_mod_value.set_hard(parameters[kParamModValue].def);
+  d->s_twist_value.set_hard(parameters[kParamTwistValue].def);
+  d->s_warp_value.set_hard(parameters[kParamWarpValue].def);
+#ifdef LEARN_ENABLED
+  d->s_crossfade.set_hard(parameters[kParamCrossfade].def);
+  d->s_fine_tune.set_hard(parameters[kParamFineTune].def);
+  d->s_new_note.set_hard(parameters[kParamNewNote].def);
+#endif
+
   return alg;
 }
 
-void parameterChanged(_NT_algorithm *self, int p)
-{
+void parameterChanged(_NT_algorithm *self, int p) {
   _ntEnosc_Alg *a = (_ntEnosc_Alg *)self;
   auto &params = a->dtc->params;
-  int16_t val = self->v[p]; // Use int16_t directly
+  int16_t val = self->v[p];
 
-  // All parameters are directly handled, no UI modes needed
   switch (p) {
 #ifdef LEARN_ENABLED
   case kParamLearn: {
     int16_t prev_learn_val = a->dtc->prev_kParamLearn_val;
-    if (val == 1 && prev_learn_val == 0) { // Learn parameter turned on (val is 0 or 1)
+    if (val == 1 && prev_learn_val == 0) {
       a->dtc->osc.enable_learn();
       a->dtc->osc.enable_pre_listen();
-      // Calculate dtc_manual_learn_offset: difference between pitch knob and root offset knob
-      a->dtc->dtc_manual_learn_offset = a->dtc->pitch_pot_base - a->dtc->root_panel_midi_note; 
-    } else if (val == 0 && prev_learn_val == 1) { // Learn parameter turned off
+      a->dtc->dtc_manual_learn_offset =
+          a->dtc->s_pitch.current() - a->dtc->s_root.current();
+    } else if (val == 0 && prev_learn_val == 1) {
       a->dtc->osc.disable_learn();
     }
-    a->dtc->prev_kParamLearn_val = val; 
+    a->dtc->prev_kParamLearn_val = val;
     break;
   }
   case kParamManualLearn: {
-    if (bool(val)) { // Manual Learn turned on (val is 0 or 1)
+    if (bool(val)) {
       a->dtc->osc.enable_pre_listen();
       a->dtc->osc.enable_follow_new_note();
-      // Initialize new_note to current pitch pot base when entering manual learn
-      params.new_note = f(a->dtc->pitch_pot_base); 
-    } else { // Manual Learn turned off
+      params.new_note = f(a->dtc->s_pitch.current());
+    } else {
       a->dtc->osc.disable_follow_new_note();
     }
     break;
   }
 #endif
   case kParamFreeze: {
-    a->dtc->osc.set_freeze(bool(val)); // val is 0 or 1
+    a->dtc->osc.set_freeze(bool(val));
     break;
   }
-  case kParamBalance: {
-    // Original hardware logic: f(val) -> -1..1 -> cubic -> *4 -> exp2 -> 0.0625..16
-    f balance = f(val / 100.f); // val is -100 to 100 -> f is -1.0 to 1.0
-    balance *= balance * balance;     // Apply cubic curve
-    balance *= 4.0_f;                 // Scale to -4..4
-    params.balance = Math::fast_exp2(balance); // Apply exponential curve
-    break;
-  }
-  case kParamRoot:
-    a->dtc->root_panel_midi_note = val; 
-    // params.root is calculated in step() by combining this with CV
-    break;
-  case kParamPitch:
-    // params.pitch = f(val); // This is calculated in step() from base, CV, and fine_tune
-    a->dtc->pitch_pot_base = val; // Store panel value for CV calculation and learn offset
-    break;
-  case kParamSpread: {
-     // Original hardware logic: f(val) -> 0..1 -> scale by 10/16 -> * kSpreadRange (12)
-    f spread_val = f(val); // val is 0-12
-    // The original hardware scaled this by a factor based on NumOsc,
-    // let's apply a similar scaling.
-    spread_val *= f(10.0f / 16.0f);
-    params.spread = spread_val;
-    break;
-  }
-  case kParamDetune: {
-    f detune_val = f(val / 100.f); // val is 0-100 -> f is 0.0-1.0
-    detune_val = (detune_val * detune_val) * (detune_val * detune_val); // Apply x^4 curve
-    detune_val *= f(10.0f / 16.0f); // Scale like the original (kMaxNumOsc is 16)
-    params.detune = detune_val;
-    break;
-  }
-  case kParamModMode:
-    params.modulation.mode = ModulationMode(val); // Explicit cast to enum is good
-    break;
-  case kParamModValue: {
-    params.modulation.value = f(val / 100.f); // val promoted to float for division
-    break;
-  }
-  case kParamScaleMode: {
-    params.scale.mode = ScaleMode(val); // Explicit cast to enum is good
-    break;
-  }
-  case kParamScaleValue: {
-    params.scale.value = val; // Implicit conversion from int16_t to int is fine
-    break;
-  }
-  case kParamTwistMode:
-    params.twist.mode = TwistMode(val); // Explicit cast to enum is good
-    break;
-  case kParamTwistValue:
-  {
-    params.twist.value = f(val / 100.f); // val promoted to float for division
-    break;
-  }
-  case kParamWarpMode:
-    params.warp.mode = WarpMode(val); // Explicit cast to enum is good
-    break;
-  case kParamWarpValue:
-  {
-    params.warp.value = f(val / 100.f); // val promoted to float for division
-    break;
-  }
-  case kParamNumOsc: {
-    params.alt.numOsc = val; // Implicit conversion from int16_t to int is fine
-    break;
-  }
-  case kParamStereoMode: {
-    params.alt.stereo_mode = static_cast<SplitMode>(val); // Explicit cast to enum is good
-    break;
-  }
-  case kParamFreezeMode: {
-    params.alt.freeze_mode = static_cast<SplitMode>(val); // Explicit cast to enum is good
-    break;
-  }
+  case kParamBalance: a->dtc->s_balance.set_target(val); break;
+  case kParamRoot: a->dtc->s_root.set_target(val); break;
+  case kParamPitch: a->dtc->s_pitch.set_target(val); break;
+  case kParamSpread: a->dtc->s_spread.set_target(val); break;
+  case kParamDetune: a->dtc->s_detune.set_target(val); break;
+  case kParamModValue: a->dtc->s_mod_value.set_target(val); break;
+  case kParamTwistValue: a->dtc->s_twist_value.set_target(val); break;
+  case kParamWarpValue: a->dtc->s_warp_value.set_target(val); break;
 #ifdef LEARN_ENABLED
-  case kParamCrossfade: {
-    params.alt.crossfade_factor = f(val / 100.f); // val promoted to float for division
-    break;
-  }
-  case kParamNewNote:
-    params.new_note = f(val); // val implicitly converted to float for f() argument
-    break;
-  case kParamFineTune:
-    params.fine_tune = f(val / 100.f); // val promoted to float for division
-    break;
+  case kParamCrossfade: a->dtc->s_crossfade.set_target(val); break;
+  case kParamFineTune: a->dtc->s_fine_tune.set_target(val); break;
+  case kParamNewNote: a->dtc->s_new_note.set_target(val); break;
+#endif
+  case kParamModMode: params.modulation.mode = ModulationMode(val); break;
+  case kParamScaleMode: params.scale.mode = ScaleMode(val); break;
+  case kParamScaleValue: params.scale.value = val; break;
+  case kParamTwistMode: params.twist.mode = TwistMode(val); break;
+  case kParamWarpMode: params.warp.mode = WarpMode(val); break;
+  case kParamNumOsc: params.alt.numOsc = val; break;
+  case kParamStereoMode: params.alt.stereo_mode = static_cast<SplitMode>(val); break;
+  case kParamFreezeMode: params.alt.freeze_mode = static_cast<SplitMode>(val); break;
+#ifdef LEARN_ENABLED
   case kParamAddNote:
-    if (bool(val)) { // val is 0 or 1
-      // params.new_note is f (MIDI 0-127)
-      // dtc_manual_learn_offset is int16_t (semitone difference)
-      // params.fine_tune is f (semitone offset +/-1)
-      float note_to_add_float = params.new_note.repr() + static_cast<float>(a->dtc->dtc_manual_learn_offset) + params.fine_tune.repr();
-      float clamped_note_float = std::clamp(note_to_add_float, 0.0f, 127.0f);
+    if (bool(val)) {
+      float note_to_add_float = params.new_note.repr() +
+                                a->dtc->dtc_manual_learn_offset +
+                                params.fine_tune.repr();
+      float clamped_note_float =
+          std::clamp(note_to_add_float, 0.0f, 127.0f);
       a->dtc->osc.new_note(f(clamped_note_float));
     }
     break;
   case kParamRemoveLastNote:
-    if (bool(val)) { // val is 0 or 1
-      a->dtc->osc.remove_last_note();
-    }
+    if (bool(val)) { a->dtc->osc.remove_last_note(); }
     break;
   case kParamResetScale:
-    if (bool(val)) { // val is 0 or 1
-      a->dtc->osc.reset_current_scale();
-    }
+    if (bool(val)) { a->dtc->osc.reset_current_scale(); }
     break;
 #endif
   default:
@@ -334,89 +309,98 @@ void parameterChanged(_NT_algorithm *self, int p)
   }
 }
 
-void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
-{
-    auto* alg = (_ntEnosc_Alg*)self;
-    auto* dtc = alg->dtc;
+void step(_NT_algorithm *self, float *busFrames, int numFramesBy4) {
+  auto *alg = (_ntEnosc_Alg *)self;
+  auto *dtc = alg->dtc;
 
-    const int numFrames = numFramesBy4 * 4;
+  const int numFrames = numFramesBy4 * 4;
 
-    // UI is 1-based, clamp to [0 .. MAX_CHAN]
-    int chanA = int(self->v[kParamOutputA]) - 1;
-    int chanB = int(self->v[kParamOutputB]) - 1;
-    constexpr int MAX_CHAN = 27;  // for a 28-channel bus
-    chanA = std::clamp(chanA, 0, MAX_CHAN);
-    chanB = std::clamp(chanB, 0, MAX_CHAN);
+  int chanA = int(self->v[kParamOutputA]) - 1;
+  int chanB = int(self->v[kParamOutputB]) - 1;
+  constexpr int MAX_CHAN = 27;
+  chanA = std::clamp(chanA, 0, MAX_CHAN);
+  chanB = std::clamp(chanB, 0, MAX_CHAN);
 
-    // Get bus indices for CV inputs
-    int pitch_cv_bus_idx = int(self->v[kParamPitchCV]) - 1; // 1-based to 0-based
-    int root_cv_bus_idx = int(self->v[kParamRootCV]) - 1;   // 1-based to 0-based
+  int pitch_cv_bus_idx = int(self->v[kParamPitchCV]) - 1;
+  int root_cv_bus_idx = int(self->v[kParamRootCV]) - 1;
+  pitch_cv_bus_idx = std::clamp(pitch_cv_bus_idx, 0, MAX_CHAN);
+  root_cv_bus_idx = std::clamp(root_cv_bus_idx, 0, MAX_CHAN);
 
-    // Clamp bus indices to valid range
-    pitch_cv_bus_idx = std::clamp(pitch_cv_bus_idx, 0, MAX_CHAN);
-    root_cv_bus_idx = std::clamp(root_cv_bus_idx, 0, MAX_CHAN);
+  float *outA = busFrames + chanA * numFrames;
+  float *outB = busFrames + chanB * numFrames;
 
-    // pointers into each channel's block
-    float* outA = busFrames + chanA * numFrames;
-    float* outB = busFrames + chanB * numFrames;
+  bool replaceA = (self->v[kParamOutputAMode] != 0);
+  bool replaceB = (self->v[kParamOutputBMode] != 0);
 
-    // 0 = mix, nonzero = replace
-    bool replaceA = (self->v[kParamOutputAMode] != 0);
-    bool replaceB = (self->v[kParamOutputBMode] != 0);
+  constexpr int BS = kBlockSize;
 
-    constexpr int BS = kBlockSize;  // 8 samples
+  for (int frame = 0; frame < numFrames; frame += BS) {
+    float smoothed_balance = dtc->s_balance.next();
+    f balance = f(smoothed_balance / 100.f);
+    balance *= balance * balance;
+    balance *= 4.0_f;
+    dtc->params.balance = Math::fast_exp2(balance);
 
-    for (int frame = 0; frame < numFrames; frame += BS)
-    {
-        // Read CV input values. Assume busFrames provide direct voltage readings.
-        // Convert 1V/Oct to semitone offset (voltage * 12.0f)
-        f current_pitch_cv_value = f(busFrames[pitch_cv_bus_idx * numFrames + frame] * 12.0f);
-        f current_root_cv_value = f(busFrames[root_cv_bus_idx * numFrames + frame] * 12.0f); 
+    float smoothed_spread = dtc->s_spread.next();
+    f spread_val = f(smoothed_spread);
+    spread_val *= f(10.0f / 16.0f);
+    dtc->params.spread = spread_val;
 
-        // Calculate final pitch for the oscillator (MIDI note 0-127)
-        // pitch_pot_base is float (panel MIDI note), CV and fine_tune are f (semitone offsets)
-        float calculated_pitch_float = dtc->pitch_pot_base + current_pitch_cv_value.repr() + dtc->params.fine_tune.repr();
-        dtc->params.pitch = f(std::clamp(calculated_pitch_float, 0.0f, 127.0f));
+    float smoothed_detune = dtc->s_detune.next();
+    f detune_val = f(smoothed_detune / 100.f);
+    detune_val = (detune_val * detune_val) * (detune_val * detune_val);
+    detune_val *= f(10.0f / 16.0f);
+    dtc->params.detune = detune_val;
 
-        // The "Pitch" knob (0-127) now acts as a bipolar offset around a center point (e.g., C4/MIDI 60)
-        // This mimics the original hardware's behavior.
-        const float pitch_range = 72.0f; // 6 octaves, same as kPitchPotRange
-        float pitch_offset = (dtc->pitch_pot_base / 127.f) * pitch_range;
-        pitch_offset -= pitch_range / 2.0f; // Center the range, making it -36 to +36
+    dtc->params.modulation.value = f(dtc->s_mod_value.next() / 100.f);
+    dtc->params.twist.value = f(dtc->s_twist_value.next() / 100.f);
+    dtc->params.warp.value = f(dtc->s_warp_value.next() / 100.f);
 
-        // The final pitch combines a fixed center note, the bipolar offset, CV, and fine tune
-        dtc->params.pitch = f(60.0f + pitch_offset) + current_pitch_cv_value + dtc->params.fine_tune;
-        
-        // The "Root" knob (0-21) is also a bipolar offset.
-        const float root_range = 21.0f;
-        float root_offset = (dtc->root_panel_midi_note / 21.f) * root_range;
+#ifdef LEARN_ENABLED
+    dtc->params.alt.crossfade_factor = f(dtc->s_crossfade.next() / 100.f);
+    dtc->params.fine_tune = f(dtc->s_fine_tune.next() / 100.f);
+    dtc->params.new_note = f(dtc->s_new_note.next());
+#endif
 
-        // The final root is the offset plus CV.
-        // The Scale::Process function will handle wrapping this into the correct octave.
-        dtc->params.root = f(root_offset) + current_root_cv_value;
+    f current_pitch_cv_value =
+        f(busFrames[pitch_cv_bus_idx * numFrames + frame] * 12.0f);
+    f current_root_cv_value =
+        f(busFrames[root_cv_bus_idx * numFrames + frame] * 12.0f);
 
-        // produce BS stereo samples in dtc->blk
-        dtc->osc.Process(dtc->blk);
+    float pitch_pot_base = dtc->s_pitch.next();
+    float root_panel_midi_note = dtc->s_root.next();
 
-        int valid = std::min(BS, numFrames - frame);
-        for (int i = 0; i < valid; ++i)
-        {
-            // convert fixed-point to float
-            float sampleL = Float(dtc->blk[i].l).repr() * 5.0f;
-            float sampleR = Float(dtc->blk[i].r).repr() * 5.0f;
+    const float pitch_range = 72.0f;
+    float pitch_offset = (pitch_pot_base / 127.f) * pitch_range;
+    pitch_offset -= pitch_range / 2.0f;
 
-            if (replaceA) {
-                outA[frame + i] = sampleL;
-            } else {
-                outA[frame + i] += sampleL;
-            }
-            if (replaceB) {
-                outB[frame + i] = sampleR;
-            } else {
-                outB[frame + i] += sampleR;
-            }
-        }
+    dtc->params.pitch =
+        f(60.0f + pitch_offset) + current_pitch_cv_value + dtc->params.fine_tune;
+
+    const float root_range = 21.0f;
+    float root_offset = (root_panel_midi_note / 21.f) * root_range;
+
+    dtc->params.root = f(root_offset) + current_root_cv_value;
+
+    dtc->osc.Process(dtc->blk);
+
+    int valid = std::min(BS, numFrames - frame);
+    for (int i = 0; i < valid; ++i) {
+      float sampleL = Float(dtc->blk[i].l).repr() * 5.0f;
+      float sampleR = Float(dtc->blk[i].r).repr() * 5.0f;
+
+      if (replaceA) {
+        outA[frame + i] = sampleL;
+      } else {
+        outA[frame + i] += sampleL;
+      }
+      if (replaceB) {
+        outB[frame + i] = sampleR;
+      } else {
+        outB[frame + i] += sampleR;
+      }
     }
+  }
 }
 
 static const _NT_factory factory = {
@@ -440,10 +424,8 @@ static const _NT_factory factory = {
     .deserialise = nullptr,
 };
 
-extern "C" uintptr_t pluginEntry(_NT_selector selector, uint32_t index)
-{
-  switch (selector)
-  {
+extern "C" uintptr_t pluginEntry(_NT_selector selector, uint32_t index) {
+  switch (selector) {
   case kNT_selector_version:
     return kNT_apiVersionCurrent;
   case kNT_selector_numFactories:

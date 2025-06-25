@@ -124,7 +124,7 @@ $(OBJ) $(ENOSC_OBJ): | $(GENERATED_SRCS)
 ###############################################################################
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -f $(DYNAMIC_DATA_CC) $(ENOSC_DATA_CC) $(ENOSC_DATA_HH)
+	rm -f $(ENOSC_DATA_CC) $(ENOSC_DATA_HH)
 
 check: all
 	@echo "Checking for undefined symbols in $(PLUGIN_O)…"

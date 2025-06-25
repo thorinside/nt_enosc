@@ -41,4 +41,3 @@ inline void HAL_IncTick()  {}
 inline uint32_t HAL_GetTick() { return 0; }
 
 #endif /* ENOSC_PLUGIN_STUBS_H_ */
-
