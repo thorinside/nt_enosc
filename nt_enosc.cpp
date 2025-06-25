@@ -420,7 +420,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
 }
 
 static const _NT_factory factory = {
-    .guid = NT_MULTICHAR('N', 'T', 'E', 'O'),
+    .guid = NT_MULTICHAR('T', 'h', 'E', 'O'),
     .name = "EnsembleOsc",
     .description = "4ms Ensemble Oscillator port",
     .calculateStaticRequirements = calculateStaticRequirements,
