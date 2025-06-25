@@ -1,0 +1,53 @@
+name: Make Plug-in Archive
+
+on:
+  push:
+    tags:
+      - "v*" # Runs action on pushed tags starting with 'v'
+
+permissions:
+  contents: write # Needed for creating/updating GitHub releases
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Install dependencies via Homebrew
+        run: |
+          brew update
+          brew install --cask gcc-arm-embedded
+
+      - name: Verify installation
+        run: |
+          arm-none-eabi-g++ --version
+
+      - name: Build plugin
+        run: |
+          echo "Building..."
+          make clean 
+          make
+
+      - name: Prepare directory structure
+        run: |
+          mkdir -p release/programs/plug-ins
+          echo "Copying plugin"
+          cp plugins/nt_enosc.o release/programs/plug-ins/
+
+      - name: Zip nt_grids plugin artifact
+        run: |
+          cd release
+          zip -r ../plugin.zip programs
+          cd ..
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: plugin.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
