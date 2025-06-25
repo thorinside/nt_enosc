@@ -27,8 +27,15 @@ jobs:
         run: |
           arm-none-eabi-g++ --version
 
+      - name: Setup Python virtual environment
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install numpy
+
       - name: Build plugin
         run: |
+          source .venv/bin/activate
           echo "Building..."
           make clean 
           make
