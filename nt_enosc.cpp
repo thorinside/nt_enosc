@@ -115,7 +115,7 @@ static const _NT_parameter parameters[] = {
     {.name = "Output A", .min = 1, .max = 28, .def = 13, .unit = (uint8_t)kNT_unitAudioOutput, .scaling = 0, .enumStrings = NULL},
     {.name = "Output B", .min = 1, .max = 28, .def = 14, .unit = (uint8_t)kNT_unitAudioOutput, .scaling = 0, .enumStrings = NULL},
     {.name = "Balance", .min = -100, .max = 100, .def = 100, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
-    {.name = "Root Note", .min = 0, .max = 21, .def = 12, .unit = (uint8_t)kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
+    {.name = "Root", .min = 0, .max = 21, .def = 12, .unit = (uint8_t)kNT_unitNone, .scaling = 0, .enumStrings = NULL},
     {.name = "Pitch", .min = 0, .max = 127, .def = 0, .unit = (uint8_t)kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
     {.name = "Spread", .min = 0,  .max = 12, .def = 4, .unit = (uint8_t)kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
     
