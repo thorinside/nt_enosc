@@ -110,46 +110,46 @@ const int kNumBusses = 28;
 // Parameter definitions
 // clang-format off
 static const _NT_parameter parameters[] = {
-    {.name = "Pitch CV Input", .min = 0, .max = 28, .def = 1, .unit = (uint8_t)kNT_unitCvInput, .scaling = 0, .enumStrings = NULL},
-    {.name = "Root CV Input", .min = 0, .max = 28, .def = 2, .unit = (uint8_t)kNT_unitCvInput, .scaling = 0, .enumStrings = NULL},
-    {.name = "Output A", .min = 1, .max = 28, .def = 13, .unit = (uint8_t)kNT_unitAudioOutput, .scaling = 0, .enumStrings = NULL},
-    {.name = "Output B", .min = 1, .max = 28, .def = 14, .unit = (uint8_t)kNT_unitAudioOutput, .scaling = 0, .enumStrings = NULL},
-    {.name = "Balance", .min = -100, .max = 100, .def = 100, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
-    {.name = "Root", .min = 0, .max = 21, .def = 12, .unit = (uint8_t)kNT_unitNone, .scaling = 0, .enumStrings = NULL},
-    {.name = "Pitch", .min = 0, .max = 127, .def = 0, .unit = (uint8_t)kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
-    {.name = "Spread", .min = 0,  .max = 12, .def = 4, .unit = (uint8_t)kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
-    
+    NT_PARAMETER_CV_INPUT("Pitch CV Input", 0, 1)
+    NT_PARAMETER_CV_INPUT("Root CV Input", 0, 2)
+    NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output A", 1, 13)
+    NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Output B", 1, 14)
+    {.name = "Balance", .min = -100, .max = 100, .def = 100, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Root", .min = 0, .max = 210, .def = 120, .unit = kNT_unitNone, .scaling = kNT_scaling10, .enumStrings = NULL},
+    {.name = "Pitch", .min = 0, .max = 127, .def = 0, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
+    {.name = "Spread", .min = 0,  .max = 12, .def = 4, .unit = kNT_unitSemitones, .scaling = 0, .enumStrings = NULL},
+
     //detune should always be positive
-    {.name = "Detune", .min = 0,  .max = 100, .def = 0, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Detune", .min = 0,  .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
 
-    {.name = "Mod mode", .min = 0, .max = 2, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumMod},
-    {.name = "Cross FM", .min = 0, .max = 100, .def = 0, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Mod mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumMod},
+    {.name = "Cross FM", .min = 0, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
 
-    {.name = "Scale Mode", .min = 0, .max = 2, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumScale},
-    {.name = "Scale Preset", .min = 0, .max = 9, .def = 0, .unit = (uint8_t)kNT_unitNone, .scaling = 0, .enumStrings = NULL},
+    {.name = "Scale Mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumScale},
+    {.name = "Scale Preset", .min = 0, .max = 9, .def = 0, .unit = kNT_unitNone, .scaling = 0, .enumStrings = NULL},
 
-    {.name = "Twist mode", .min = 0, .max = 2, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumTwist},
-    {.name = "Twist", .min = 0, .max = 100, .def = 0, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Twist mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumTwist},
+    {.name = "Twist", .min = 0, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
 
-    {.name = "Warp mode", .min = 0, .max = 2, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumWarp},
-    {.name = "Warp", .min = 0, .max = 100, .def = 0, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
+    {.name = "Warp mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumWarp},
+    {.name = "Warp", .min = 0, .max = 100, .def = 0, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL},
 
-    {.name = "Num Osc", .min = 1, .max = 16, .def = 16, .unit = (uint8_t)kNT_unitNone, .scaling = 0, .enumStrings = NULL},
-    {.name = "Stereo mode", .min = 0, .max = 2, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumSplit},
-    {.name = "Freeze mode", .min = 0, .max = 2, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumSplit},
-    {.name = "Freeze", .min = 0, .max = 1, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumFreeze},
+    {.name = "Num Osc", .min = 1, .max = 16, .def = 16, .unit = kNT_unitNone, .scaling = 0, .enumStrings = NULL},
+    {.name = "Stereo mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumSplit},
+    {.name = "Freeze mode", .min = 0, .max = 2, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumSplit},
+    {.name = "Freeze", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumFreeze},
 #ifdef LEARN_ENABLED
-    {.name = "Learn", .min = 0, .max = 1, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumLearn},
-    {.name = "Crossfade", .min = 0, .max = 100, .def = 12, .unit = (uint8_t)kNT_unitPercent, .scaling = 0, .enumStrings = NULL}, // 12% approx 0.125 internal
-    {.name = "New Note MIDI", .min = 0, .max = 127, .def = 60, .unit = (uint8_t)kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
-    {.name = "Fine Tune", .min = -100, .max = 100, .def = 0, .unit = (uint8_t)kNT_unitSemitones, .scaling = (uint8_t)kNT_scaling100, .enumStrings = NULL},
-    {.name = "Add Note", .min = 0, .max = 1, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
-    {.name = "Remove Last Note", .min = 0, .max = 1, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
-    {.name = "Reset Scale", .min = 0, .max = 1, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
-    {.name = "Manual Learn", .min = 0, .max = 1, .def = 0, .unit = (uint8_t)kNT_unitEnum, .scaling = 0, .enumStrings = enumLearn},
+    {.name = "Learn", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumLearn},
+    {.name = "Crossfade", .min = 0, .max = 100, .def = 12, .unit = kNT_unitPercent, .scaling = 0, .enumStrings = NULL}, // 12% approx 0.125 internal
+    {.name = "New Note MIDI", .min = 0, .max = 127, .def = 60, .unit = kNT_unitMIDINote, .scaling = 0, .enumStrings = NULL},
+    {.name = "Fine Tune", .min = -100, .max = 100, .def = 0, .unit = kNT_unitSemitones, .scaling = kNT_scaling100, .enumStrings = NULL},
+    {.name = "Add Note", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
+    {.name = "Remove Last Note", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
+    {.name = "Reset Scale", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumAction},
+    {.name = "Manual Learn", .min = 0, .max = 1, .def = 0, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = enumLearn},
 #endif
 };
-// clang-format on
+// clang-format off
 
 // Forward declaration for parameterChanged
 void parameterChanged(_NT_algorithm *self, int p);
@@ -243,7 +243,7 @@ void parameterChanged(_NT_algorithm *self, int p) {
       a->dtc->osc.enable_learn();
       a->dtc->osc.enable_pre_listen();
       a->dtc->dtc_manual_learn_offset =
-          a->dtc->s_pitch.current() - a->dtc->s_root.current();
+          a->dtc->s_pitch.current() - (a->dtc->s_root.current() / 10.0f);
     } else if (val == 0 && prev_learn_val == 1) {
       a->dtc->osc.disable_learn();
     }
@@ -368,7 +368,7 @@ void step(_NT_algorithm *self, float *busFrames, int numFramesBy4) {
         f(busFrames[root_cv_bus_idx * numFrames + frame] * 12.0f);
 
     float pitch_pot_base = dtc->s_pitch.next();
-    float root_panel_midi_note = dtc->s_root.next();
+    float root_panel_value = dtc->s_root.next();
 
     const float pitch_range = 72.0f;
     float pitch_offset = (pitch_pot_base / 127.f) * pitch_range;
@@ -377,8 +377,8 @@ void step(_NT_algorithm *self, float *busFrames, int numFramesBy4) {
     dtc->params.pitch =
         f(60.0f + pitch_offset) + current_pitch_cv_value + dtc->params.fine_tune;
 
-    const float root_range = 21.0f;
-    float root_offset = (root_panel_midi_note / 21.f) * root_range;
+    // root_panel_value is 0-210, divide by 10 to get 0.0-21.0
+    float root_offset = root_panel_value / 10.0f;
 
     dtc->params.root = f(root_offset) + current_root_cv_value;
 
@@ -403,6 +403,43 @@ void step(_NT_algorithm *self, float *busFrames, int numFramesBy4) {
   }
 }
 
+// Current internal version for preset format
+static constexpr int kInternalVersion = 2;
+
+void serialise(_NT_algorithm *self, _NT_jsonStream &stream) {
+  stream.addMemberName("internal_version");
+  stream.addNumber(kInternalVersion);
+}
+
+bool deserialise(_NT_algorithm *self, _NT_jsonParse &parse) {
+  int internal_version = 1; // Default to legacy if not present
+
+  int num;
+  if (!parse.numberOfObjectMembers(num))
+    return true; // No custom data, assume legacy
+
+  for (int i = 0; i < num; ++i) {
+    if (parse.matchName("internal_version")) {
+      if (!parse.number(internal_version))
+        return false;
+    } else {
+      if (!parse.skipMember())
+        return false;
+    }
+  }
+
+  // Migrate legacy presets (version 1)
+  if (internal_version < 2) {
+    // Root parameter changed from 0-21 to 0-210 (tenths precision)
+    int16_t old_root = self->v[kParamRoot];
+    int16_t new_root = std::clamp(old_root * 10, 0, 210);
+    NT_setParameterFromUi(NT_algorithmIndex(self),
+                          kParamRoot + NT_parameterOffset(), new_root);
+  }
+
+  return true;
+}
+
 static const _NT_factory factory = {
     .guid = NT_MULTICHAR('T', 'h', 'E', 'O'),
     .name = "EnsembleOsc",
@@ -420,8 +457,8 @@ static const _NT_factory factory = {
     .hasCustomUi = nullptr,
     .customUi = nullptr,
     .setupUi = nullptr,
-    .serialise = nullptr,
-    .deserialise = nullptr,
+    .serialise = serialise,
+    .deserialise = deserialise,
 };
 
 extern "C" uintptr_t pluginEntry(_NT_selector selector, uint32_t index) {
