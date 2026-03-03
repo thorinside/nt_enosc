@@ -354,7 +354,12 @@ void step(_NT_algorithm *self, float *busFrames, int numFramesBy4) {
 
     dtc->params.modulation.value = f(dtc->s_mod_value.next() / 100.f);
     dtc->params.twist.value = f(dtc->s_twist_value.next() / 100.f);
-    dtc->params.warp.value = f(dtc->s_warp_value.next() / 100.f);
+    float warp_raw = dtc->s_warp_value.next() / 100.f;
+    // FOLD mode bypasses at ≤0.005, causing a click. Keep above threshold.
+    if (dtc->params.warp.mode == FOLD && warp_raw < 0.006f) {
+      warp_raw = 0.006f;
+    }
+    dtc->params.warp.value = f(warp_raw);
 
 #ifdef LEARN_ENABLED
     dtc->params.alt.crossfade_factor = f(dtc->s_crossfade.next() / 100.f);
@@ -412,29 +417,21 @@ void serialise(_NT_algorithm *self, _NT_jsonStream &stream) {
 }
 
 bool deserialise(_NT_algorithm *self, _NT_jsonParse &parse) {
-  int internal_version = 1; // Default to legacy if not present
-
   int num;
   if (!parse.numberOfObjectMembers(num))
-    return true; // No custom data, assume legacy
+    return true; // No custom data
 
   for (int i = 0; i < num; ++i) {
     if (parse.matchName("internal_version")) {
+      int internal_version;
       if (!parse.number(internal_version))
         return false;
+      // Version tracked for future migrations; v1->v2 Root migration
+      // not automated (NT_setParameterFromUi unsafe during deserialise)
     } else {
       if (!parse.skipMember())
         return false;
     }
-  }
-
-  // Migrate legacy presets (version 1)
-  if (internal_version < 2) {
-    // Root parameter changed from 0-21 to 0-210 (tenths precision)
-    int16_t old_root = self->v[kParamRoot];
-    int16_t new_root = std::clamp(old_root * 10, 0, 210);
-    NT_setParameterFromUi(NT_algorithmIndex(self),
-                          kParamRoot + NT_parameterOffset(), new_root);
   }
 
   return true;
