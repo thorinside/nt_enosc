@@ -126,6 +126,33 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(ENOSC_DATA_CC) $(ENOSC_DATA_HH)
 
+###############################################################################
+# Native host build for nt_emu / VCV Rack (not part of the hardware build)
+###############################################################################
+HOST_CXX ?= clang++
+HOST_OS := $(shell uname -s)
+ifeq ($(HOST_OS),Darwin)
+	HOST_DYLIB_EXT := dylib
+	HOST_DYLIB_LDFLAGS := -dynamiclib -undefined dynamic_lookup
+else
+	HOST_DYLIB_EXT := so
+	HOST_DYLIB_LDFLAGS := -shared
+endif
+HOST_SRCS := nt_enosc.cpp math.cc $(DYNAMIC_DATA_CC) $(ENOSC_DATA_CC) \
+             $(ENOSC_DIR)/lib/easiglib/dsp.cc
+HOST_DYLIB := $(PLUGIN_DIR)/nt_enosc.$(HOST_DYLIB_EXT)
+HOST_DYLIB_FLAGS := -std=gnu++17 -O2 -fPIC -fno-rtti -fno-exceptions \
+                    -Wall -Wno-reorder -include enosc_plugin_stubs.h \
+                    -I. -I$(INCLUDE_PATH) -I$(BUILD_DIR) -I$(ENOSC_DIR) \
+                    -I$(ENOSC_DIR)/src -I$(ENOSC_DIR)/lib/easiglib
+
+dylib: $(HOST_DYLIB)
+
+$(HOST_DYLIB): $(HOST_SRCS) | $(GENERATED_SRCS)
+	@echo "Building host plugin: $@"
+	@mkdir -p $(@D)
+	$(HOST_CXX) $(HOST_DYLIB_FLAGS) $(HOST_DYLIB_LDFLAGS) -o $@ $(HOST_SRCS)
+
 check: all
 	@echo "Checking for undefined symbols in $(PLUGIN_O)…"
 	@arm-none-eabi-nm $(PLUGIN_O) | grep ' U ' || \
@@ -142,7 +169,7 @@ check: all
 				echo "✅  .bss within limit."; \
 			fi
 
-.PHONY: all clean check
+.PHONY: all clean check dylib
 
 ###############################################################################
 # Auto-generated header dependency includes

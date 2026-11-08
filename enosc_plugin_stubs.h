@@ -21,7 +21,10 @@
 #define __ASM __asm__
 
 /* Cortex-M4 DSP half-precision type                                   */
+/* clang (host dylib builds) already treats __fp16 as a builtin type.   */
+#if !defined(__clang__)
 using __fp16 = float;
+#endif
 
 /* ------------------------------------------------------------------ */
 /*  Bare-minimum stubs for storage / hardware layers                   */
